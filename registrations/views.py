@@ -22,7 +22,7 @@ class RegistrationListCreateView(APIView):
         return [IsAuthenticated()]
 
     def get(self, request):
-        registrations = Registration.objects.all().order_by("id")[:10]
+        registrations = Registration.objects.select_related("user", "ticket").all().order_by("id")[:10]
         serializer = RegistrationSerializer(registrations, many=True)
         return Response({"registrations": serializer.data})
 
@@ -48,7 +48,7 @@ class RegistrationDetailView(APIView):
 
     def get_object(self, pk):
         try:
-            registration = Registration.objects.get(pk=pk)
+            registration = Registration.objects.select_related("user", "ticket").get(pk=pk)
             self.check_object_permissions(self.request, registration)
             return registration
         except Registration.DoesNotExist:

@@ -22,7 +22,7 @@ class TicketListCreateView(APIView):
         return [IsAuthenticated()]
 
     def get(self, request):
-        tickets = Ticket.objects.all().order_by("name")[:10]
+        tickets = Ticket.objects.select_related("event").all().order_by("name")[:10]
         serializer = TicketSerializer(tickets, many=True)
         return Response({"tickets": serializer.data})
 
@@ -40,7 +40,7 @@ class TicketDetailView(APIView):
 
     def get_object(self, pk):
         try:
-            ticket = Ticket.objects.get(pk=pk)
+            ticket = Ticket.objects.select_related("event").get(pk=pk)
             self.check_object_permissions(self.request, ticket)
             return ticket
         except Ticket.DoesNotExist:

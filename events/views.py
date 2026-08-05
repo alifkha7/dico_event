@@ -49,7 +49,7 @@ class EventListCreateView(APIView):
 
         if not events:
             print("Data diambil dari database...")
-            data = Event.objects.all().order_by("start_time")[:10]
+            data = Event.objects.select_related("organizer").all().order_by("start_time")[:10]
             cache.get(CACHE_KEY_LIST)
             serializer = EventSerializer(data, many=True, context={"request": request})
 
@@ -89,7 +89,7 @@ class EventDetailView(APIView):
 
     def get_object(self, pk):
         try:
-            event = Event.objects.get(pk=pk)
+            event = Event.objects.select_related("organizer").get(pk=pk)
             self.check_object_permissions(self.request, event)
             return event
         except Event.DoesNotExist:
@@ -101,7 +101,7 @@ class EventDetailView(APIView):
         event = cache.get(cache_key)
 
         if not event:
-            data = Event.objects.get(pk=pk)
+            data = Event.objects.select_related("organizer").get(pk=pk)
             serializer = EventSerializer(data, context={"request": request})
 
             event_data = json.dumps(serializer.data)

@@ -23,7 +23,7 @@ class PaymentListCreateView(APIView):
         return [IsAuthenticated()]
 
     def get(self, request):
-        payments = Payment.objects.all().order_by("registration_id")[:10]
+        payments = Payment.objects.select_related("registration").all().order_by("registration_id")[:10]
         serializer = PaymentSerializer(payments, many=True)
         return Response({"payments": serializer.data})
 
@@ -48,7 +48,7 @@ class PaymentDetailView(APIView):
 
     def get_object(self, pk):
         try:
-            payment = Payment.objects.get(pk=pk)
+            payment = Payment.objects.select_related("registration").get(pk=pk)
             self.check_object_permissions(self.request, payment)
             return payment
         except Payment.DoesNotExist:
