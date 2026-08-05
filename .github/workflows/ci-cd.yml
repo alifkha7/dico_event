@@ -1,0 +1,55 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  integration:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pipenv"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipenv
+          pipenv install --system --dev --skip-lock
+
+      - name: Linting and Formatting (Ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Automated Testing (Pytest)
+        env:
+          DJANGO_SETTINGS_MODULE: event_project.settings.dev
+        run: |
+          pytest
+
+  deployment:
+    name: Continuous Deployment (Stub)
+    needs: integration
+    runs-on: ubuntu-latest
+    # Hanya berjalan otomatis jika ada merge/push langsung ke branch utama
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Dummy Deployment
+        run: |
+          echo "=========================================================="
+          echo "Semua pengujian CI berhasil dilewati dengan sempurna!"
+          echo "Belum ada target spesifik untuk deployment (seperti VPS/AWS)."
+          echo "Ganti langkah ini di masa depan dengan skrip deployment Anda."
+          echo "=========================================================="

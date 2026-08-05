@@ -1,0 +1,26 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+django = "==4.2"
+djangorestframework = "*"
+djangorestframework-simplejwt = "*"
+python-dotenv = "*"
+psycopg2-binary = "*"
+redis = "*"
+minio = "*"
+pillow = "*"
+celery = "*"
+loguru = "*"
+django-celery-beat = "*"
+
+[dev-packages]
+ruff = "*"
+pytest = "*"
+pytest-django = "*"
+
+[requires]
+python_version = "3.10"
+python_full_version = "3.10.0"
