@@ -7,20 +7,22 @@ roles. Access is controlled via custom permission classes defined in
 """
 
 from django.contrib.auth.models import Group
-from django.shortcuts import get_object_or_404
 from django.http import Http404
+from django.shortcuts import get_object_or_404
 from loguru import logger
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+
 from .models import User
-from .serializers import UserSerializer, GroupSerializer, AssignRoleSerializer
 from .permissions import (
     IsAdminOrSuperUser,
-    IsOwnerOrAdminOrSuperUser, IsSuperUser,
+    IsOwnerOrAdminOrSuperUser,
+    IsSuperUser,
 )
+from .serializers import AssignRoleSerializer, GroupSerializer, UserSerializer
 
 
 class UserListCreateView(APIView):
@@ -29,18 +31,18 @@ class UserListCreateView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.request.method == 'GET':
+        if self.request.method == "GET":
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         # POST requests are open for unauthenticated clients to allow self‑registration
         return []
 
     def get(self, request):
-        users = User.objects.all().order_by('username')[:10]
-        serializer = UserSerializer(users, many=True, context={'request': request})
-        return Response({'users': serializer.data})
+        users = User.objects.all().order_by("username")[:10]
+        serializer = UserSerializer(users, many=True, context={"request": request})
+        return Response({"users": serializer.data})
 
     def post(self, request):
-        serializer = UserSerializer(data=request.data, context={'request': request})
+        serializer = UserSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             logger.info("Creating a new user with data: {}", request.data)
@@ -54,7 +56,7 @@ class UserDetailView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.request.method == 'DELETE':
+        if self.request.method == "DELETE":
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated(), IsOwnerOrAdminOrSuperUser()]
 
@@ -69,12 +71,12 @@ class UserDetailView(APIView):
 
     def get(self, request, pk):
         user = self.get_object(pk)
-        serializer = UserSerializer(user, context={'request': request})
+        serializer = UserSerializer(user, context={"request": request})
         return Response(serializer.data)
 
     def put(self, request, pk):
         user = self.get_object(pk)
-        serializer = UserSerializer(user, data=request.data, context={'request': request})
+        serializer = UserSerializer(user, data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             logger.info("Updating user with ID {} with data: {}", pk, request.data)
@@ -94,12 +96,12 @@ class GroupListCreateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrSuperUser]
 
     def get(self, request):
-        groups = Group.objects.all().order_by('name')[:10]
-        serializer = GroupSerializer(groups, many=True, context={'request': request})
-        return Response({'groups': serializer.data})
+        groups = Group.objects.all().order_by("name")[:10]
+        serializer = GroupSerializer(groups, many=True, context={"request": request})
+        return Response({"groups": serializer.data})
 
     def post(self, request):
-        serializer = GroupSerializer(data=request.data, context={'request': request})
+        serializer = GroupSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             logger.info("Creating a new group with data: {}", request.data)
@@ -121,12 +123,12 @@ class GroupDetailView(APIView):
 
     def get(self, request, pk):
         group = self.get_object(pk)
-        serializer = GroupSerializer(group, context={'request': request})
+        serializer = GroupSerializer(group, context={"request": request})
         return Response(serializer.data)
 
     def put(self, request, pk):
         group = self.get_object(pk)
-        serializer = GroupSerializer(group, data=request.data, context={'request': request})
+        serializer = GroupSerializer(group, data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             logger.info("Updating group with ID {} with data: {}", pk, request.data)
@@ -149,9 +151,9 @@ class AssignRoleView(APIView):
     def post(self, request):
         serializer = AssignRoleSerializer(data=request.data)
         if serializer.is_valid():
-            user = get_object_or_404(User, pk=request.data['user_id'])
-            group = get_object_or_404(Group, pk=request.data['group_id'])
+            user = get_object_or_404(User, pk=request.data["user_id"])
+            group = get_object_or_404(Group, pk=request.data["group_id"])
             user.groups.add(group)
             logger.info("Assigned group {} to user {}", group.name, user.username)
-            return Response({'message': 'role assigned successfully'}, status=status.HTTP_201_CREATED)
+            return Response({"message": "role assigned successfully"}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

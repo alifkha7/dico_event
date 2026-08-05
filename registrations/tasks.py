@@ -1,13 +1,17 @@
+# ruff: noqa: E501
+from datetime import timedelta
+
 from celery import shared_task
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
-from datetime import timedelta
-from registrations.models import Registration
 from loguru import logger
+
+from registrations.models import Registration
+
 
 @shared_task
 def send_ticket_email(user_email, username, registration_id):
-    subject = f'Reminder: Acara Anda Akan Segera Dimulai'
+    subject = "Reminder: Acara Anda Akan Segera Dimulai"
 
     # Plain text version (fallback for email clients that don't support HTML)
     text_content = f"""Halo {username},
@@ -54,10 +58,11 @@ def send_ticket_email(user_email, username, registration_id):
         </html>
         """
 
-    email = EmailMultiAlternatives(subject, text_content, 'no-reply@eventticket.com', [user_email])
+    email = EmailMultiAlternatives(subject, text_content, "no-reply@eventticket.com", [user_email])
     email.attach_alternative(html_content, "text/html")
     email.send()
-    return f'Email sent to {user_email}'
+    return f"Email sent to {user_email}"
+
 
 @shared_task
 def check_and_send_reminders():
@@ -69,7 +74,7 @@ def check_and_send_reminders():
     registrations = Registration.objects.filter(
         is_reminder_sent=False,
         ticket__event__start_time__gte=two_hours_later,
-        ticket__event__start_time__lt=two_hours_and_15_mins_later
+        ticket__event__start_time__lt=two_hours_and_15_mins_later,
     )
 
     count = 0

@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+
 from core.permissions import IsAdminOrSuperUser
 from tickets.models import Ticket
 from tickets.serializers import TicketSerializer
@@ -16,14 +17,14 @@ class TicketListCreateView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.request.method == 'POST':
+        if self.request.method == "POST":
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated()]
 
     def get(self, request):
-        tickets = Ticket.objects.all().order_by('name')[:10]
+        tickets = Ticket.objects.all().order_by("name")[:10]
         serializer = TicketSerializer(tickets, many=True)
-        return Response({'tickets': serializer.data})
+        return Response({"tickets": serializer.data})
 
     def post(self, request):
         serializer = TicketSerializer(data=request.data)
@@ -49,7 +50,7 @@ class TicketDetailView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.request.method != 'GET':
+        if self.request.method != "GET":
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated()]
 

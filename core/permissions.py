@@ -20,9 +20,7 @@ class IsAdmin(BasePermission):
 
     def has_permission(self, request, view) -> bool:
         return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.groups.filter(name='admin').exists()
+            request.user and request.user.is_authenticated and request.user.groups.filter(name="admin").exists()
         )
 
 
@@ -31,9 +29,7 @@ class IsOrganizer(BasePermission):
 
     def has_permission(self, request, view) -> bool:
         return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.groups.filter(name='organizer').exists()
+            request.user and request.user.is_authenticated and request.user.groups.filter(name="organizer").exists()
         )
 
 
@@ -44,10 +40,7 @@ class IsAdminOrSuperUser(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and (
-                    request.user.is_superuser
-                    or request.user.groups.filter(name='admin').exists()
-            )
+            and (request.user.is_superuser or request.user.groups.filter(name="admin").exists())
         )
 
 
@@ -58,10 +51,7 @@ class IsAdminOrOrganizerOrSuperUser(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and (
-                    request.user.is_superuser
-                    or request.user.groups.filter(name__in=['admin', 'organizer']).exists()
-            )
+            and (request.user.is_superuser or request.user.groups.filter(name__in=["admin", "organizer"]).exists())
         )
 
 
@@ -76,11 +66,7 @@ class IsOwnerOrAdminOrSuperUser(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and (
-                    request.user.is_superuser
-                    or request.user.groups.filter(name='admin').exists()
-                    or obj == request.user
-            )
+            and (request.user.is_superuser or request.user.groups.filter(name="admin").exists() or obj == request.user)
         )
 
 
@@ -94,18 +80,18 @@ class IsEventOwnerOrAdminOrSuperUser(BasePermission):
 
     def has_object_permission(self, request, view, obj) -> bool:
         # Allow safe methods (GET, HEAD, OPTIONS) if user is authenticated
-        if request.method in ('GET', 'HEAD', 'OPTIONS'):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
             return bool(request.user and request.user.is_authenticated)
         return bool(
             request.user
             and request.user.is_authenticated
             and (
-                    request.user.is_superuser
-                    or request.user.groups.filter(name='admin').exists()
-                    or (
-                            request.user.groups.filter(name='organizer').exists()
-                            and getattr(obj, 'organizer', None) == request.user
-                    )
+                request.user.is_superuser
+                or request.user.groups.filter(name="admin").exists()
+                or (
+                    request.user.groups.filter(name="organizer").exists()
+                    and getattr(obj, "organizer", None) == request.user
+                )
             )
         )
 
@@ -121,26 +107,23 @@ class IsOwnerOfRegistrationOrAdminOrSuperUser(BasePermission):
     def has_object_permission(self, request, view, obj) -> bool:
         # Determine owner: registration.user for Registration and
         # payment.registration.user for Payment.
-        owner = getattr(obj, 'user', None)
-        if owner is None and hasattr(obj, 'registration'):
-            owner = getattr(obj.registration, 'user', None)
+        owner = getattr(obj, "user", None)
+        if owner is None and hasattr(obj, "registration"):
+            owner = getattr(obj.registration, "user", None)
         # Allow read access to owner
-        if request.method in ('GET', 'HEAD', 'OPTIONS'):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
             return bool(
                 request.user
                 and request.user.is_authenticated
                 and (
-                        request.user.is_superuser
-                        or request.user.groups.filter(name='admin').exists()
-                        or owner == request.user
+                    request.user.is_superuser
+                    or request.user.groups.filter(name="admin").exists()
+                    or owner == request.user
                 )
             )
         # Non‑safe methods allowed only for admin/superuser
         return bool(
             request.user
             and request.user.is_authenticated
-            and (
-                    request.user.is_superuser
-                    or request.user.groups.filter(name='admin').exists()
-            )
+            and (request.user.is_superuser or request.user.groups.filter(name="admin").exists())
         )

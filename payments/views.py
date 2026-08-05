@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from core.permissions import IsAdminOrSuperUser
+
 from .models import Payment
 from .serializers import PaymentSerializer
 
@@ -17,14 +18,14 @@ class PaymentListCreateView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.request.method == 'GET':
+        if self.request.method == "GET":
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated()]
 
     def get(self, request):
-        payments = Payment.objects.all().order_by('registration_id')[:10]
+        payments = Payment.objects.all().order_by("registration_id")[:10]
         serializer = PaymentSerializer(payments, many=True)
-        return Response({'payments': serializer.data})
+        return Response({"payments": serializer.data})
 
     def post(self, request):
         serializer = PaymentSerializer(data=request.data)
@@ -41,7 +42,7 @@ class PaymentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.request.method == 'GET':
+        if self.request.method == "GET":
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated()]
 

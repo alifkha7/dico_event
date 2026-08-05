@@ -1,5 +1,7 @@
 import uuid
+
 from django.db import models
+
 from registrations.models import Registration
 
 
@@ -13,7 +15,7 @@ class Payment(models.Model):
     amount_paid = models.IntegerField()
 
     class Meta:
-        db_table = 'payments'
+        db_table = "payments"
 
     def __str__(self) -> str:
-        return f'{self.registration} - {self.payment_status}'
+        return f"{self.registration} - {self.payment_status}"

@@ -1,33 +1,38 @@
 import json
 import os
 import tempfile
+
 from django.core.cache import cache
-from loguru import logger
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from loguru import logger
 from minio import Minio
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+
 from core.permissions import IsAdminOrOrganizerOrSuperUser, IsAdminOrSuperUser, IsEventOwnerOrAdminOrSuperUser
+
 from .models import Event
-from .serializers import EventSerializer, EventPosterSerializer
+from .serializers import EventPosterSerializer, EventSerializer
 
 
 def get_minio_client():
     return Minio(
-        endpoint=os.getenv('MINIO_ENDPOINT_URL'),
-        access_key=os.getenv('MINIO_ACCESS_KEY'),
-        secret_key=os.getenv('MINIO_SECRET_KEY'),
-        secure=False
+        endpoint=os.getenv("MINIO_ENDPOINT_URL"),
+        access_key=os.getenv("MINIO_ACCESS_KEY"),
+        secret_key=os.getenv("MINIO_SECRET_KEY"),
+        secure=False,
     )
 
-bucket_name = os.getenv('MINIO_BUCKET_NAME')
+
+bucket_name = os.getenv("MINIO_BUCKET_NAME")
 CACHE_KEY_LIST = "event_list"
 CACHE_KEY_DETAIL = "event_detail_{}"
+
 
 class EventListCreateView(APIView):
     """List events or create a new event."""
@@ -35,7 +40,7 @@ class EventListCreateView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.request.method == 'POST':
+        if self.request.method == "POST":
             return [IsAuthenticated(), IsAdminOrOrganizerOrSuperUser()]
         return [IsAuthenticated()]
 
@@ -44,9 +49,9 @@ class EventListCreateView(APIView):
 
         if not events:
             print("Data diambil dari database...")
-            data = Event.objects.all().order_by('start_time')[:10]
+            data = Event.objects.all().order_by("start_time")[:10]
             cache.get(CACHE_KEY_LIST)
-            serializer = EventSerializer(data, many=True, context={'request': request})
+            serializer = EventSerializer(data, many=True, context={"request": request})
 
             events_data = json.dumps(serializer.data)
 
@@ -58,12 +63,12 @@ class EventListCreateView(APIView):
             print("Data diambil dari cache...")
             data_source = "cache"
 
-        response = Response({'events': json.loads(events)})
-        response['X-Data-Source'] = data_source
+        response = Response({"events": json.loads(events)})
+        response["X-Data-Source"] = data_source
         return response
 
     def post(self, request):
-        serializer = EventSerializer(data=request.data, context={'request': request})
+        serializer = EventSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             cache.delete(CACHE_KEY_LIST)
@@ -71,12 +76,14 @@ class EventListCreateView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class EventDetailView(APIView):
     """Retrieve, update or delete a single event."""
+
     authentication_classes = [JWTAuthentication]
-    
+
     def get_permissions(self):
-        if self.request.method != 'GET':
+        if self.request.method != "GET":
             return [IsAuthenticated(), IsEventOwnerOrAdminOrSuperUser()]
         return [IsAuthenticated()]
 
@@ -95,7 +102,7 @@ class EventDetailView(APIView):
 
         if not event:
             data = Event.objects.get(pk=pk)
-            serializer = EventSerializer(data, context={'request': request})
+            serializer = EventSerializer(data, context={"request": request})
 
             event_data = json.dumps(serializer.data)
 
@@ -108,12 +115,12 @@ class EventDetailView(APIView):
             data_source = "cache"
 
         response = Response(json.loads(event))
-        response['X-Data-Source'] = data_source
+        response["X-Data-Source"] = data_source
         return response
 
     def put(self, request, pk):
         event = self.get_object(pk)
-        serializer = EventSerializer(event, data=request.data, context={'request': request})
+        serializer = EventSerializer(event, data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             cache.delete(CACHE_KEY_LIST)
@@ -130,6 +137,7 @@ class EventDetailView(APIView):
         logger.info("Deleting event with ID {}", pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
 class EventPosterView(APIView):
     authentication_classes = [JWTAuthentication]
     parser_classes = [MultiPartParser, FormParser]
@@ -138,8 +146,8 @@ class EventPosterView(APIView):
         return [IsAuthenticated(), IsAdminOrSuperUser()]
 
     def post(self, request):
-        serializer = EventPosterSerializer(data=request.data , context={'request': request})
-        file = request.data.get('image')
+        serializer = EventPosterSerializer(data=request.data, context={"request": request})
+        file = request.data.get("image")
 
         if serializer.is_valid():
             serializer.save()
@@ -160,8 +168,8 @@ class EventPosterView(APIView):
             except Exception as e:
                 logger.error(f"Upload to Minio failed: {str(e)}")
                 return Response(
-                    {"error": f"Upload to Minio failed: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    {"error": f"Upload to Minio failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             finally:
                 os.remove(temp_file_path)
 
@@ -181,9 +189,7 @@ class EventPosterDetailView(APIView):
         for image in images:
             client = get_minio_client()
             presigned_url = client.presigned_get_object(
-                bucket_name,
-                image.image.name,
-                response_headers={"response-content-type": "image/jpeg"}
+                bucket_name, image.image.name, response_headers={"response-content-type": "image/jpeg"}
             )
             serialized_images.append({"id": image.id, "url": presigned_url})
 

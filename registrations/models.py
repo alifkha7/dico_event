@@ -1,7 +1,10 @@
 import uuid
+
 from django.db import models
+
 from core.models import User
 from tickets.models import Ticket
+
 
 class Registration(models.Model):
     """A user's registration for a ticket."""
@@ -12,7 +15,7 @@ class Registration(models.Model):
     is_reminder_sent = models.BooleanField(default=False)
 
     class Meta:
-        db_table = 'registrations'
+        db_table = "registrations"
 
     def __str__(self) -> str:
-        return f'{self.user.username} - {self.ticket}'
+        return f"{self.user.username} - {self.ticket}"

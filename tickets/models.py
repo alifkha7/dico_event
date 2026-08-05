@@ -1,5 +1,7 @@
 import uuid
+
 from django.db import models
+
 from events.models import Event
 
 
@@ -15,7 +17,7 @@ class Ticket(models.Model):
     quota = models.IntegerField()
 
     class Meta:
-        db_table = 'tickets'
+        db_table = "tickets"
 
     def __str__(self) -> str:
-        return f'{self.event.name} - {self.name}'
+        return f"{self.event.name} - {self.name}"

@@ -10,22 +10,28 @@ server, create users, etc.
 
 import os
 import sys
+
 from loguru import logger
+
 
 def main() -> None:
     logger.remove()  # hapus handler bawaan
     logger.add(sys.stdout, level="INFO")  # log ke console
-    logger.add("logs/error.log",
-               rotation="500 MB",  # rotasi file jika mencapai 500 MB)
-               level="ERROR",  # hanya log level error
-               backtrace=True,
-               diagnose=True)  #
-    logger.add("logs/application.log",
-               rotation="1 day",  # rotasi harian
-               level="INFO") # hanya log level info
+    logger.add(
+        "logs/error.log",
+        rotation="500 MB",  # rotasi file jika mencapai 500 MB)
+        level="ERROR",  # hanya log level error
+        backtrace=True,
+        diagnose=True,
+    )  #
+    logger.add(
+        "logs/application.log",
+        rotation="1 day",  # rotasi harian
+        level="INFO",
+    )  # hanya log level info
 
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'event_project.settings.dev')
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "event_project.settings.dev")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -37,5 +43,5 @@ def main() -> None:
     execute_from_command_line(sys.argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

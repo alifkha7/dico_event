@@ -8,5 +8,5 @@ class CoreConfig(AppConfig):
     functionality for the event project.
     """
 
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'core'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "core"

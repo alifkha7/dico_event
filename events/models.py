@@ -1,5 +1,7 @@
 import uuid
+
 from django.db import models
+
 from core.models import User
 
 
@@ -15,10 +17,10 @@ class Event(models.Model):
     status = models.CharField(max_length=50)
     quota = models.IntegerField()
     category = models.CharField(max_length=100)
-    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='events')
+    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="events")
 
     class Meta:
-        db_table = 'events'
+        db_table = "events"
 
     def __str__(self) -> str:
         return self.name
@@ -33,4 +35,4 @@ class EventImage(models.Model):
         return self.event.name
 
     class Meta:
-        db_table = 'event_images'
+        db_table = "event_images"
