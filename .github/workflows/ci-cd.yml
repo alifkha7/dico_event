@@ -34,7 +34,7 @@ jobs:
 
       - name: Automated Testing (Pytest)
         env:
-          DJANGO_SETTINGS_MODULE: event_project.settings.dev
+          DJANGO_SETTINGS_MODULE: event_project.settings.test
         run: |
           pytest
 
