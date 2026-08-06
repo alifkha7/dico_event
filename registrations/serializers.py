@@ -54,11 +54,11 @@ class RegistrationSerializer(serializers.HyperlinkedModelSerializer):
             ticket = validated_data["ticket"]
             # Lock the ticket row to prevent race conditions during high concurrency
             ticket = Ticket.objects.select_for_update().get(id=ticket.id)
-            
+
             if ticket.quota <= 0:
                 raise serializers.ValidationError({"ticket": "This ticket is sold out."})
-                
+
             ticket.quota -= 1
             ticket.save()
-            
+
             return super().create(validated_data)
