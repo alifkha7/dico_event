@@ -157,3 +157,19 @@ class AssignRoleView(APIView):
             logger.info("Assigned group {} to user {}", group.name, user.username)
             return Response({"message": "role assigned successfully"}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class HealthCheckView(APIView):
+    """Health check endpoint to verify API and DB status."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        try:
+            # Perform a lightweight DB check
+            User.objects.exists()
+            return Response({"status": "ok", "db": "healthy"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error("Health check failed: {}", str(e))
+            return Response({"status": "error", "db": "unhealthy"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

@@ -10,4 +10,5 @@ urlpatterns = [
     path("groups/", views.GroupListCreateView.as_view(), name="group-list"),
     path("groups/<int:pk>/", views.GroupDetailView.as_view(), name="group-detail"),
     path("assign-roles/", views.AssignRoleView.as_view(), name="assign-roles"),
+    path("health/", views.HealthCheckView.as_view(), name="health-check"),
 ]
