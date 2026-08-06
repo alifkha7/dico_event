@@ -5,6 +5,7 @@ import tempfile
 from django.core.cache import cache
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from loguru import logger
 from minio import Minio
 from rest_framework import status
@@ -44,6 +45,11 @@ class EventListCreateView(APIView):
             return [IsAuthenticated(), IsAdminOrOrganizerOrSuperUser()]
         return [IsAuthenticated()]
 
+    @extend_schema(
+        summary="List all events (cached)",
+        responses={200: EventSerializer(many=True)},
+        tags=["events"],
+    )
     def get(self, request):
         events = cache.get(CACHE_KEY_LIST)
 
@@ -67,6 +73,12 @@ class EventListCreateView(APIView):
         response["X-Data-Source"] = data_source
         return response
 
+    @extend_schema(
+        summary="Create a new event (Admin/Organizer/Superuser only)",
+        request=EventSerializer,
+        responses={201: EventSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["events"],
+    )
     def post(self, request):
         serializer = EventSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
@@ -96,6 +108,7 @@ class EventDetailView(APIView):
             logger.info("Event with ID {} not found", pk)
             raise Http404
 
+    @extend_schema(summary="Get event detail (cached)", responses={200: EventSerializer}, tags=["events"])
     def get(self, request, pk):
         cache_key = CACHE_KEY_DETAIL.format(pk)
         event = cache.get(cache_key)
@@ -118,6 +131,12 @@ class EventDetailView(APIView):
         response["X-Data-Source"] = data_source
         return response
 
+    @extend_schema(
+        summary="Update event (Owner/Admin/Superuser only)",
+        request=EventSerializer,
+        responses={200: EventSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["events"],
+    )
     def put(self, request, pk):
         event = self.get_object(pk)
         serializer = EventSerializer(event, data=request.data, context={"request": request})
@@ -129,6 +148,11 @@ class EventDetailView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        summary="Delete event (Owner/Admin/Superuser only)",
+        responses={204: OpenApiResponse(description="Event deleted successfully")},
+        tags=["events"],
+    )
     def delete(self, request, pk):
         event = self.get_object(pk)
         event.delete()
@@ -145,6 +169,12 @@ class EventPosterView(APIView):
     def get_permissions(self):
         return [IsAuthenticated(), IsAdminOrSuperUser()]
 
+    @extend_schema(
+        summary="Upload event poster image (Admin/Superuser only)",
+        request=EventPosterSerializer,
+        responses={201: EventPosterSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["events"],
+    )
     def post(self, request):
         serializer = EventPosterSerializer(data=request.data, context={"request": request})
         file = request.data.get("image")
@@ -181,6 +211,11 @@ class EventPosterDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Get event poster presigned URLs",
+        responses={200: OpenApiResponse(description="List of presigned image URLs")},
+        tags=["events"],
+    )
     def get(self, request, pk):
         event = get_object_or_404(Event, pk=pk)
         images = event.eventimage_set.all()

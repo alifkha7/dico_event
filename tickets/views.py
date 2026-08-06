@@ -1,4 +1,5 @@
 from django.http import Http404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from loguru import logger
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -21,11 +22,18 @@ class TicketListCreateView(APIView):
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated()]
 
+    @extend_schema(summary="List all tickets", responses={200: TicketSerializer(many=True)}, tags=["tickets"])
     def get(self, request):
         tickets = Ticket.objects.select_related("event").all().order_by("name")[:10]
         serializer = TicketSerializer(tickets, many=True)
         return Response({"tickets": serializer.data})
 
+    @extend_schema(
+        summary="Create a new ticket (Admin/Superuser only)",
+        request=TicketSerializer,
+        responses={201: TicketSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["tickets"],
+    )
     def post(self, request):
         serializer = TicketSerializer(data=request.data)
         if serializer.is_valid():
@@ -54,11 +62,18 @@ class TicketDetailView(APIView):
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated()]
 
+    @extend_schema(summary="Get ticket detail", responses={200: TicketSerializer}, tags=["tickets"])
     def get(self, request, pk):
         ticket = self.get_object(pk)
         serializer = TicketSerializer(ticket)
         return Response(serializer.data)
 
+    @extend_schema(
+        summary="Update ticket (Admin/Superuser only)",
+        request=TicketSerializer,
+        responses={200: TicketSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["tickets"],
+    )
     def put(self, request, pk):
         ticket = self.get_object(pk)
         serializer = TicketSerializer(ticket, data=request.data)
@@ -68,6 +83,11 @@ class TicketDetailView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        summary="Delete ticket (Admin/Superuser only)",
+        responses={204: OpenApiResponse(description="Ticket deleted successfully")},
+        tags=["tickets"],
+    )
     def delete(self, request, pk):
         ticket = self.get_object(pk)
         ticket.delete()

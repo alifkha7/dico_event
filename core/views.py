@@ -9,6 +9,7 @@ roles. Access is controlled via custom permission classes defined in
 from django.contrib.auth.models import Group
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from loguru import logger
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -36,11 +37,22 @@ class UserListCreateView(APIView):
         # POST requests are open for unauthenticated clients to allow self‑registration
         return []
 
+    @extend_schema(
+        summary="List all users (Admin/Superuser only)",
+        responses={200: UserSerializer(many=True)},
+        tags=["users"],
+    )
     def get(self, request):
         users = User.objects.all().order_by("username")[:10]
         serializer = UserSerializer(users, many=True, context={"request": request})
         return Response({"users": serializer.data})
 
+    @extend_schema(
+        summary="Register a new user",
+        request=UserSerializer,
+        responses={201: UserSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["users"],
+    )
     def post(self, request):
         serializer = UserSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
@@ -69,11 +81,18 @@ class UserDetailView(APIView):
             logger.info("User with ID {} not found", pk)
             raise Http404
 
+    @extend_schema(summary="Get user detail", responses={200: UserSerializer}, tags=["users"])
     def get(self, request, pk):
         user = self.get_object(pk)
         serializer = UserSerializer(user, context={"request": request})
         return Response(serializer.data)
 
+    @extend_schema(
+        summary="Update user",
+        request=UserSerializer,
+        responses={200: UserSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["users"],
+    )
     def put(self, request, pk):
         user = self.get_object(pk)
         serializer = UserSerializer(user, data=request.data, context={"request": request})
@@ -83,6 +102,11 @@ class UserDetailView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        summary="Delete user (Admin/Superuser only)",
+        responses={204: OpenApiResponse(description="User deleted successfully")},
+        tags=["users"],
+    )
     def delete(self, request, pk):
         user = self.get_object(pk)
         user.delete()
@@ -95,11 +119,18 @@ class GroupListCreateView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminOrSuperUser]
 
+    @extend_schema(summary="List all groups", responses={200: GroupSerializer(many=True)}, tags=["groups"])
     def get(self, request):
         groups = Group.objects.all().order_by("name")[:10]
         serializer = GroupSerializer(groups, many=True, context={"request": request})
         return Response({"groups": serializer.data})
 
+    @extend_schema(
+        summary="Create a new group (Superuser only)",
+        request=GroupSerializer,
+        responses={201: GroupSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["groups"],
+    )
     def post(self, request):
         serializer = GroupSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
@@ -121,11 +152,18 @@ class GroupDetailView(APIView):
         except Group.DoesNotExist:
             raise Http404
 
+    @extend_schema(summary="Get group detail", responses={200: GroupSerializer}, tags=["groups"])
     def get(self, request, pk):
         group = self.get_object(pk)
         serializer = GroupSerializer(group, context={"request": request})
         return Response(serializer.data)
 
+    @extend_schema(
+        summary="Update group",
+        request=GroupSerializer,
+        responses={200: GroupSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["groups"],
+    )
     def put(self, request, pk):
         group = self.get_object(pk)
         serializer = GroupSerializer(group, data=request.data, context={"request": request})
@@ -135,6 +173,11 @@ class GroupDetailView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        summary="Delete group",
+        responses={204: OpenApiResponse(description="Group deleted successfully")},
+        tags=["groups"],
+    )
     def delete(self, request, pk):
         group = self.get_object(pk)
         group.delete()
@@ -148,6 +191,15 @@ class AssignRoleView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsSuperUser]
 
+    @extend_schema(
+        summary="Assign a user to a role/group (Superuser only)",
+        request=AssignRoleSerializer,
+        responses={
+            201: OpenApiResponse(description="Role assigned successfully"),
+            400: OpenApiResponse(description="Validation error"),
+        },
+        tags=["assign-roles"],
+    )
     def post(self, request):
         serializer = AssignRoleSerializer(data=request.data)
         if serializer.is_valid():
@@ -165,6 +217,14 @@ class HealthCheckView(APIView):
     authentication_classes = []
     permission_classes = []
 
+    @extend_schema(
+        summary="Health check — API & DB status",
+        responses={
+            200: OpenApiResponse(description='API healthy: {"status": "ok", "db": "healthy"}'),
+            503: OpenApiResponse(description='DB unhealthy: {"status": "error", "db": "unhealthy"}'),
+        },
+        tags=["health"],
+    )
     def get(self, request):
         try:
             # Perform a lightweight DB check

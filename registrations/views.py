@@ -1,4 +1,5 @@
 from django.http import Http404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from loguru import logger
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -21,11 +22,25 @@ class RegistrationListCreateView(APIView):
             return [IsAuthenticated(), IsAdminOrSuperUser()]
         return [IsAuthenticated()]
 
+    @extend_schema(
+        summary="List all registrations (Admin/Superuser only)",
+        responses={200: RegistrationSerializer(many=True)},
+        tags=["registrations"],
+    )
     def get(self, request):
         registrations = Registration.objects.select_related("user", "ticket").all().order_by("id")[:10]
         serializer = RegistrationSerializer(registrations, many=True)
         return Response({"registrations": serializer.data})
 
+    @extend_schema(
+        summary="Register to an event (authenticated user)",
+        request=RegistrationSerializer,
+        responses={
+            201: RegistrationSerializer,
+            400: OpenApiResponse(description="Validation error or ticket sold out"),
+        },
+        tags=["registrations"],
+    )
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
         if serializer.is_valid():
@@ -55,11 +70,18 @@ class RegistrationDetailView(APIView):
             logger.info(f"Registration with ID {pk} not found")
             raise Http404
 
+    @extend_schema(summary="Get registration detail", responses={200: RegistrationSerializer}, tags=["registrations"])
     def get(self, request, pk):
         registration = self.get_object(pk)
         serializer = RegistrationSerializer(registration)
         return Response(serializer.data)
 
+    @extend_schema(
+        summary="Update registration (Admin/Superuser only)",
+        request=RegistrationSerializer,
+        responses={200: RegistrationSerializer, 400: OpenApiResponse(description="Validation error")},
+        tags=["registrations"],
+    )
     def put(self, request, pk):
         registration = self.get_object(pk)
         serializer = RegistrationSerializer(
@@ -72,6 +94,11 @@ class RegistrationDetailView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        summary="Delete registration",
+        responses={204: OpenApiResponse(description="Registration deleted successfully")},
+        tags=["registrations"],
+    )
     def delete(self, request, pk):
         registration = self.get_object(pk)
         registration.delete()
