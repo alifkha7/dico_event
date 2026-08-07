@@ -73,19 +73,14 @@ WSGI_APPLICATION = "event_project.wsgi.application"
 DATABASE_URL = os.getenv("DATABASE_URL")
 DATABASE_HOST = os.getenv("DATABASE_HOST")
 
+# If DATABASE_HOST actually contains a full URL (e.g. postgresql://...)
+if not DATABASE_URL and DATABASE_HOST and "://" in DATABASE_HOST:
+    DATABASE_URL = DATABASE_HOST
+
 if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=600,
-            ssl_require=False,
-        )
-    }
-elif DATABASE_HOST and DATABASE_HOST.startswith("postgres"):
-    # If DATABASE_HOST was accidentally set to a full DATABASE_URL
-    DATABASES = {
-        "default": dj_database_url.config(
-            default=DATABASE_HOST,
             conn_max_age=600,
             ssl_require=False,
         )
