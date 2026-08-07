@@ -18,6 +18,8 @@ django-celery-beat = "*"
 gunicorn = "*"
 dj-database-url = "*"
 drf-spectacular = "*"
+whitenoise = "*"
+
 
 [dev-packages]
 ruff = "*"
