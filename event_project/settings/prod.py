@@ -18,5 +18,3 @@ if extra_hosts:
     ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(",") if h.strip()])
 
 STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
-
-
