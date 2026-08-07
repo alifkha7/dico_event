@@ -22,3 +22,10 @@ RUN pipenv install --system --skip-lock --dev --clear
 
 # Copy project files
 COPY . /app/
+
+# Expose port
+EXPOSE ${PORT:-8000}
+
+# Run migrations and start Gunicorn server
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn event_project.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
+
