@@ -27,7 +27,8 @@ COPY . /app/
 ENV PORT=8080
 EXPOSE ${PORT}
 
-# Run migrations and start Gunicorn server
-CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn event_project.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 120"]
+# Run migrations, collectstatic, init superuser and start Gunicorn server
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate --noinput && python manage.py init_superuser && gunicorn event_project.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 120"]
+
 
 
