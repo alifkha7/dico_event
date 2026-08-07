@@ -70,10 +70,22 @@ TEMPLATES = [
 WSGI_APPLICATION = "event_project.wsgi.application"
 
 # Database configuration
-if os.getenv("DATABASE_URL"):
+DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_HOST = os.getenv("DATABASE_HOST")
+
+if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.config(
-            default=os.getenv("DATABASE_URL"),
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=False,
+        )
+    }
+elif DATABASE_HOST and DATABASE_HOST.startswith("postgres"):
+    # If DATABASE_HOST was accidentally set to a full DATABASE_URL
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=DATABASE_HOST,
             conn_max_age=600,
             ssl_require=False,
         )
@@ -85,7 +97,7 @@ elif os.getenv("DATABASE_NAME"):
             "NAME": os.getenv("DATABASE_NAME"),
             "USER": os.getenv("DATABASE_USER"),
             "PASSWORD": os.getenv("DATABASE_PASSWORD"),
-            "HOST": os.getenv("DATABASE_HOST"),
+            "HOST": DATABASE_HOST,
             "PORT": os.getenv("DATABASE_PORT", "5432"),
         }
     }
