@@ -1,5 +1,6 @@
 import os
-from .common import *  # noqa: F403
+
+from .common import *  # noqa: F403, F405
 
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1")
 
@@ -16,5 +17,6 @@ extra_hosts = os.getenv("ALLOWED_HOSTS", "")
 if extra_hosts:
     ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(",") if h.strip()])
 
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
+
 

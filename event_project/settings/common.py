@@ -10,6 +10,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
 from celery.schedules import crontab
 from dotenv import load_dotenv
 
@@ -69,8 +70,6 @@ TEMPLATES = [
 WSGI_APPLICATION = "event_project.wsgi.application"
 
 # Database configuration
-import dj_database_url
-
 if os.getenv("DATABASE_URL"):
     DATABASES = {
         "default": dj_database_url.config(
