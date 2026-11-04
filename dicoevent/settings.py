@@ -144,14 +144,16 @@ SIMPLE_JWT = {
 }
 
 # Redis Settings
-REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
 REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+CACHE_TTL = 3600
 
 if USE_SQLITE:
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
             'LOCATION': 'test-cache',
+            'TIMEOUT': 3600,
         }
     }
     PASSWORD_HASHERS = [
@@ -162,6 +164,7 @@ else:
         'default': {
             'BACKEND': 'django_redis.cache.RedisCache',
             'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1',
+            'TIMEOUT': 3600,
             'OPTIONS': {
                 'CLIENT_CLASS': 'django_redis.client.DefaultClient',
             }

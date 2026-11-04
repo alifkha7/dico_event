@@ -1,6 +1,7 @@
 import os
 import pytest
 from django.conf import settings
+from django.core.cache import cache
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -8,6 +9,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 # Ensure fast SQLite in-memory and local memory cache for testing
 os.environ['USE_SQLITE_TEST'] = 'True'
+
+@pytest.fixture(autouse=True)
+def clear_cache_between_tests():
+    """Autouse fixture to isolate cache between all test cases."""
+    cache.clear()
+    yield
+    cache.clear()
 
 @pytest.fixture
 def api_client():
