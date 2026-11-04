@@ -52,3 +52,24 @@ def test_settings_reads_backing_services_env_vars(monkeypatch):
     assert settings.MAIL_PASSWORD == 'smtp_pass'
     assert settings.EMAIL_HOST == 'smtp.example.com'
     assert settings.EMAIL_PORT == 2525
+
+def test_settings_redis_cache_configuration(monkeypatch):
+    """Verify settings.py defines REDIS_HOST, REDIS_PORT, CACHE_TTL=3600, and CACHES default TIMEOUT=3600."""
+    monkeypatch.setenv('REDIS_HOST', 'localhost')
+    monkeypatch.setenv('REDIS_PORT', '6379')
+    monkeypatch.setenv('USE_SQLITE_TEST', 'False')
+
+    from dicoevent import settings
+    importlib.reload(settings)
+
+    assert settings.REDIS_HOST == 'localhost'
+    assert settings.REDIS_PORT == '6379'
+    assert getattr(settings, 'CACHE_TTL', None) == 3600
+    assert settings.CACHES['default']['TIMEOUT'] == 3600
+    assert settings.CACHES['default']['BACKEND'] == 'django_redis.cache.RedisCache'
+    assert settings.CACHES['default']['LOCATION'] == 'redis://localhost:6379/1'
+
+    # Reset
+    monkeypatch.setenv('USE_SQLITE_TEST', 'True')
+    importlib.reload(settings)
+    assert settings.CACHES['default']['TIMEOUT'] == 3600

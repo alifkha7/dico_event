@@ -32,6 +32,14 @@ from .permissions import (
     PaymentViewSetPermission,
     CanUploadPosterPermission,
 )
+from .caching import (
+    get_cached_event_detail,
+    set_cached_event_detail,
+    get_cached_event_list,
+    set_cached_event_list,
+    invalidate_event_list_cache,
+    invalidate_all_event_caches,
+)
 from . import storage
 
 User = get_user_model()
@@ -186,26 +194,55 @@ class EventViewSet(viewsets.ModelViewSet):
     ordering = ['start_time', 'id']
 
     def list(self, request, *args, **kwargs):
+        query_string = request.META.get('QUERY_STRING', '')
+        cached_data = get_cached_event_list(query_string)
+        if cached_data is not None:
+            logger.info(f"Serving events list from cache (query: '{query_string}').")
+            response = Response(cached_data, status=status.HTTP_200_OK)
+            response['X-Data-Source'] = 'cache'
+            return response
+
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            logger.info(f"Listing events (paginated): count={self.paginator.page.paginator.count}")
-            return self.get_paginated_response(serializer.data)
+            logger.info(f"Listing events from database (paginated): count={self.paginator.page.paginator.count}")
+            paginated_response = self.get_paginated_response(serializer.data)
+            set_cached_event_list(query_string, paginated_response.data)
+            paginated_response['X-Data-Source'] = 'database'
+            return paginated_response
+
         serializer = self.get_serializer(queryset, many=True)
-        logger.info(f"Listing events: count={len(serializer.data)}")
-        return Response({"events": serializer.data})
+        logger.info(f"Listing events from database: count={len(serializer.data)}")
+        data = {"events": serializer.data}
+        set_cached_event_list(query_string, data)
+        response = Response(data, status=status.HTTP_200_OK)
+        response['X-Data-Source'] = 'database'
+        return response
 
     def retrieve(self, request, *args, **kwargs):
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        pk = kwargs.get(lookup_url_kwarg, kwargs.get('pk'))
+        cached_data = get_cached_event_detail(pk)
+        if cached_data is not None:
+            logger.info(f"Serving event detail from cache (ID: {pk}).")
+            response = Response(cached_data, status=status.HTTP_200_OK)
+            response['X-Data-Source'] = 'cache'
+            return response
+
         instance = self.get_object()
         serializer = self.get_serializer(instance)
-        logger.info(f"Retrieved event: '{instance.name}' (ID: {instance.id})")
-        return Response(serializer.data)
+        set_cached_event_detail(pk, serializer.data)
+        logger.info(f"Retrieved event from database: '{instance.name}' (ID: {instance.id})")
+        response = Response(serializer.data, status=status.HTTP_200_OK)
+        response['X-Data-Source'] = 'database'
+        return response
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         event = serializer.save()
+        invalidate_event_list_cache()
         username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
         logger.info(f"Event created successfully: '{event.name}' (ID: {event.id}) by user '{username}'")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -216,6 +253,7 @@ class EventViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         event = serializer.save()
+        invalidate_all_event_caches(pk=str(event.id))
         username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
         logger.info(f"Event updated successfully: '{event.name}' (ID: {event.id}) by user '{username}'")
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -225,6 +263,7 @@ class EventViewSet(viewsets.ModelViewSet):
         event_id = str(instance.id)
         event_name = instance.name
         self.perform_destroy(instance)
+        invalidate_all_event_caches(pk=event_id)
         username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
         logger.info(f"Event deleted successfully: '{event_name}' (ID: {event_id}) by user '{username}'")
         return Response(status=status.HTTP_204_NO_CONTENT)
