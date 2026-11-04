@@ -171,8 +171,26 @@ def test_delete_user_and_subsequent_404(api_client, admin_user, regular_user, ge
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
 @pytest.mark.django_db
+def test_delete_user_by_superuser(api_client, superuser, regular_user, get_auth_header):
+    """Verify Superuser can delete User, returns 204 No Content."""
+    user_id = regular_user.id
+    headers = get_auth_header(superuser)
+    del_res = api_client.delete(f'/api/users/{user_id}/', **headers)
+    assert del_res.status_code == status.HTTP_204_NO_CONTENT
+
+    get_res = api_client.get(f'/api/users/{user_id}/')
+    assert get_res.status_code == status.HTTP_404_NOT_FOUND
+
+@pytest.mark.django_db
 def test_delete_user_by_unauthorized_user(api_client, regular_user, admin_user, get_auth_header):
     """Verify standard User cannot delete another User."""
     headers = get_auth_header(regular_user)
     response = api_client.delete(f'/api/users/{admin_user.id}/', **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+@pytest.mark.django_db
+def test_delete_user_self_by_regular_user_forbidden(api_client, regular_user, get_auth_header):
+    """Verify standard User cannot delete their own account per Story 9 / Spec (403 Forbidden)."""
+    headers = get_auth_header(regular_user)
+    response = api_client.delete(f'/api/users/{regular_user.id}/', **headers)
     assert response.status_code == status.HTTP_403_FORBIDDEN

@@ -7,6 +7,54 @@ from .models import Event, Ticket, Registration, Payment, EventPoster
 
 User = get_user_model()
 
+
+def _resolve_foreign_key(
+    attrs,
+    initial_data,
+    instance,
+    field_name,
+    id_keys,
+    model_class,
+    default_fn=None,
+    required_on_create=True,
+    label=None,
+):
+    """
+    Resolve a foreign key from initial_data or attrs into a model instance.
+    Eliminates duplicated FK resolution boilerplate across serializers.
+    """
+    raw_val = None
+    for k in id_keys:
+        val = initial_data.get(k) if initial_data else None
+        if val is None and attrs:
+            val = attrs.get(k)
+        if val is not None:
+            raw_val = val
+            break
+
+    primary_id_key = id_keys[0]
+    display_label = label or model_class.__name__
+
+    if raw_val is not None:
+        if isinstance(raw_val, model_class):
+            attrs[field_name] = raw_val
+        else:
+            try:
+                attrs[field_name] = model_class.objects.get(id=raw_val)
+            except Exception:
+                raise serializers.ValidationError({primary_id_key: f"{model_class.__name__} not found."})
+    elif instance is None and required_on_create:
+        default_val = default_fn() if callable(default_fn) else None
+        if default_val is not None:
+            attrs[field_name] = default_val
+        else:
+            raise serializers.ValidationError({primary_id_key: f"{display_label} is required."})
+
+    for k in id_keys:
+        if k != field_name:
+            attrs.pop(k, None)
+
+
 class UserSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -117,28 +165,17 @@ class EventSerializer(serializers.ModelSerializer):
             if missing:
                 raise serializers.ValidationError({f: "This field is required." for f in missing})
 
-        organizer_raw = (
-            self.initial_data.get('organizer_id')
-            or self.initial_data.get('organizer')
-            or attrs.get('organizer_id')
+        _resolve_foreign_key(
+            attrs=attrs,
+            initial_data=self.initial_data,
+            instance=self.instance,
+            field_name='organizer',
+            id_keys=['organizer_id', 'organizer'],
+            model_class=User,
+            default_fn=lambda: request.user if request and request.user and request.user.is_authenticated else None,
+            required_on_create=True,
+            label='Organizer',
         )
-
-        if organizer_raw:
-            if isinstance(organizer_raw, User):
-                attrs['organizer'] = organizer_raw
-            else:
-                try:
-                    organizer_user = User.objects.get(id=organizer_raw)
-                    attrs['organizer'] = organizer_user
-                except Exception:
-                    raise serializers.ValidationError({"organizer_id": "User not found."})
-        elif self.instance is None:
-            if request and request.user and request.user.is_authenticated:
-                attrs['organizer'] = request.user
-            else:
-                raise serializers.ValidationError({"organizer_id": "Organizer is required."})
-
-        attrs.pop('organizer_id', None)
         return attrs
 
     def to_representation(self, instance):
@@ -177,25 +214,15 @@ class TicketSerializer(serializers.ModelSerializer):
             if missing:
                 raise serializers.ValidationError({f: "This field is required." for f in missing})
 
-        event_raw = (
-            self.initial_data.get('event_id')
-            or self.initial_data.get('event')
-            or attrs.get('event_id')
+        _resolve_foreign_key(
+            attrs=attrs,
+            initial_data=self.initial_data,
+            instance=self.instance,
+            field_name='event',
+            id_keys=['event_id', 'event'],
+            model_class=Event,
+            required_on_create=True,
         )
-
-        if event_raw:
-            if isinstance(event_raw, Event):
-                attrs['event'] = event_raw
-            else:
-                try:
-                    event_instance = Event.objects.get(id=event_raw)
-                    attrs['event'] = event_instance
-                except Exception:
-                    raise serializers.ValidationError({"event_id": "Event not found."})
-        elif self.instance is None:
-            raise serializers.ValidationError({"event_id": "Event is required."})
-
-        attrs.pop('event_id', None)
         return attrs
 
     def to_representation(self, instance):
@@ -222,45 +249,26 @@ class RegistrationSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         request = self.context.get('request')
 
-        ticket_raw = (
-            self.initial_data.get('ticket_id')
-            or self.initial_data.get('ticket')
-            or attrs.get('ticket_id')
+        _resolve_foreign_key(
+            attrs=attrs,
+            initial_data=self.initial_data,
+            instance=self.instance,
+            field_name='ticket',
+            id_keys=['ticket_id', 'ticket'],
+            model_class=Ticket,
+            required_on_create=True,
         )
-        if ticket_raw:
-            if isinstance(ticket_raw, Ticket):
-                attrs['ticket'] = ticket_raw
-            else:
-                try:
-                    ticket_obj = Ticket.objects.get(id=ticket_raw)
-                    attrs['ticket'] = ticket_obj
-                except Exception:
-                    raise serializers.ValidationError({"ticket_id": "Ticket not found."})
-        elif self.instance is None:
-            raise serializers.ValidationError({"ticket_id": "Ticket is required."})
 
-        user_raw = (
-            self.initial_data.get('user_id')
-            or self.initial_data.get('user')
-            or attrs.get('user_id')
+        _resolve_foreign_key(
+            attrs=attrs,
+            initial_data=self.initial_data,
+            instance=self.instance,
+            field_name='user',
+            id_keys=['user_id', 'user'],
+            model_class=User,
+            default_fn=lambda: request.user if request and request.user and request.user.is_authenticated else None,
+            required_on_create=True,
         )
-        if user_raw:
-            if isinstance(user_raw, User):
-                attrs['user'] = user_raw
-            else:
-                try:
-                    user_obj = User.objects.get(id=user_raw)
-                    attrs['user'] = user_obj
-                except Exception:
-                    raise serializers.ValidationError({"user_id": "User not found."})
-        elif self.instance is None:
-            if request and request.user and request.user.is_authenticated:
-                attrs['user'] = request.user
-            else:
-                raise serializers.ValidationError({"user_id": "User is required."})
-
-        attrs.pop('ticket_id', None)
-        attrs.pop('user_id', None)
         return attrs
 
     def to_representation(self, instance):
@@ -297,29 +305,21 @@ class PaymentSerializer(serializers.ModelSerializer):
             if missing:
                 raise serializers.ValidationError({f: "This field is required." for f in missing})
 
-        reg_raw = (
-            self.initial_data.get('registration_id')
-            or self.initial_data.get('registration')
-            or attrs.get('registration_id')
+        _resolve_foreign_key(
+            attrs=attrs,
+            initial_data=self.initial_data,
+            instance=self.instance,
+            field_name='registration',
+            id_keys=['registration_id', 'registration'],
+            model_class=Registration,
+            required_on_create=True,
         )
-        if reg_raw:
-            if isinstance(reg_raw, Registration):
-                attrs['registration'] = reg_raw
-            else:
-                try:
-                    reg_obj = Registration.objects.get(id=reg_raw)
-                    attrs['registration'] = reg_obj
-                except Exception:
-                    raise serializers.ValidationError({"registration_id": "Registration not found."})
-        elif self.instance is None:
-            raise serializers.ValidationError({"registration_id": "Registration is required."})
 
         # ADR-0001: Normalize 'completed' (case-insensitive) to 'Completed'
         status_val = attrs.get('payment_status') or self.initial_data.get('payment_status')
         if status_val is not None and str(status_val).strip().lower() == 'completed':
             attrs['payment_status'] = 'Completed'
 
-        attrs.pop('registration_id', None)
         return attrs
 
     def to_representation(self, instance):

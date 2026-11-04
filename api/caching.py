@@ -87,3 +87,7 @@ def invalidate_all_event_caches(pk=None):
     invalidate_event_list_cache()
     if pk:
         invalidate_event_detail_cache(pk)
+
+
+# Spec Line 151: Invalidate both affected Event detail cache key and all Event list cache keys
+invalidate_event_caches = invalidate_all_event_caches

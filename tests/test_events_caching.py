@@ -141,6 +141,31 @@ def test_post_event_invalidates_list_cache(api_client, organizer_user, get_auth_
     assert res_cached_after.headers.get('X-Data-Source') == 'cache'
 
 @pytest.mark.django_db
+def test_post_event_invalidates_detail_and_list_cache(api_client, organizer_user, get_auth_header, sample_event_payload):
+    """Verify POST /api/events/ invalidates both detail and list caches per Spec Line 151."""
+    # Pre-populate list cache
+    api_client.get('/api/events/')
+    assert api_client.get('/api/events/').headers.get('X-Data-Source') == 'cache'
+
+    headers = get_auth_header(organizer_user)
+    res_post = api_client.post('/api/events/', sample_event_payload, format='json', **headers)
+    assert res_post.status_code == status.HTTP_201_CREATED
+    new_event_id = res_post.data['id']
+
+    # Detail lookup immediately following creation is a database hit
+    res_detail = api_client.get(f'/api/events/{new_event_id}/')
+    assert res_detail.status_code == status.HTTP_200_OK
+    assert res_detail.headers.get('X-Data-Source') == 'database'
+
+    # Subsequent detail is cached
+    assert api_client.get(f'/api/events/{new_event_id}/').headers.get('X-Data-Source') == 'cache'
+
+    # Next list request must hit database
+    res_list = api_client.get('/api/events/')
+    assert res_list.status_code == status.HTTP_200_OK
+    assert res_list.headers.get('X-Data-Source') == 'database'
+
+@pytest.mark.django_db
 def test_put_event_invalidates_detail_and_list_cache(api_client, organizer_user, get_auth_header, created_event):
     """Verify PUT /api/events/<id>/ invalidates both detail and list caches."""
     event_id = str(created_event.id)

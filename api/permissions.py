@@ -42,16 +42,14 @@ class UserViewSetPermission(permissions.BasePermission):
     - GET (detail/retrieve): AllowAny per ADR-0001
     - GET (list): Admin or Superuser only (Authenticated User gets 403, Unauthenticated gets 401)
     - PUT/PATCH: Authenticated (Self, Admin, or Superuser)
-    - DELETE: Authenticated (Self, Admin, or Superuser)
+    - DELETE: Admin or Superuser only (Authenticated regular User gets 403 per Story 9 / Spec)
     """
     def has_permission(self, request, view):
-        if view.action == 'create':
-            return True
-        if view.action == 'retrieve':
+        if view.action in ['create', 'retrieve']:
             return True
         if not request.user or not request.user.is_authenticated:
             return False
-        if view.action == 'list':
+        if view.action in ['list', 'destroy']:
             return is_admin_user(request.user)
         return True
 
@@ -62,6 +60,8 @@ class UserViewSetPermission(permissions.BasePermission):
             return False
         if is_admin_user(request.user):
             return True
+        if view.action == 'destroy':
+            return False
         return str(obj.id) == str(request.user.id)
 
 class EventViewSetPermission(permissions.BasePermission):
@@ -107,8 +107,8 @@ class TicketViewSetPermission(permissions.BasePermission):
     - GET (list): AllowAny
     - GET (retrieve): AllowAny per ADR-0001
     - POST (create): Authenticated Superuser, Admin, or Organizer
-    - PUT / PATCH (update): Authenticated Superuser, Admin, or Organizer
-    - DELETE (destroy): Authenticated Superuser, Admin, or Organizer
+    - PUT / PATCH (update): Superuser, Admin, or Organizer who owns the event
+    - DELETE (destroy): Superuser, Admin, or Organizer who owns the event
     """
     def has_permission(self, request, view):
         if view.action in ['list', 'retrieve']:
@@ -122,7 +122,11 @@ class TicketViewSetPermission(permissions.BasePermission):
             return True
         if not request.user or not request.user.is_authenticated:
             return False
-        return can_create_or_manage_events(request.user)
+        if is_admin_user(request.user):
+            return True
+        if is_organizer_user(request.user):
+            return str(obj.event.organizer_id) == str(request.user.id)
+        return False
 
 class RegistrationViewSetPermission(permissions.BasePermission):
     """
@@ -176,4 +180,4 @@ class PaymentViewSetPermission(permissions.BasePermission):
             return False
         if is_admin_user(request.user):
             return True
-        return str(obj.registration.user_id) == str(request.user.id)
+        return str(obj.user_id) == str(request.user.id)

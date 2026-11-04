@@ -8,26 +8,29 @@ from api.models import Registration
 
 
 @shared_task
-def send_event_reminder_email(registration_id=None, user_email=None, event_name=None, start_time=None, location=None):
+def send_event_reminder_email(registration_id: str):
     """
     Celery task to send an event reminder email to a registered user.
-    Can be invoked with a registration_id or explicit user/event details.
     """
-    if registration_id:
-        try:
-            registration = Registration.objects.select_related('ticket__event', 'user').get(id=registration_id)
-            user_email = user_email or registration.user.email
-            event = registration.ticket.event
-            event_name = event_name or event.name
-            start_time = start_time or event.start_time
-            location = location or event.location
-        except Registration.DoesNotExist:
-            logger.error(f"Cannot send reminder email: Registration {registration_id} not found.")
-            return
+    if not registration_id:
+        logger.error("Cannot send reminder email: No registration_id provided.")
+        return
 
+    try:
+        registration = Registration.objects.select_related('ticket__event', 'user').get(id=registration_id)
+    except Registration.DoesNotExist:
+        logger.error(f"Cannot send reminder email: Registration {registration_id} not found.")
+        return
+
+    user_email = registration.user.email
     if not user_email:
         logger.error(f"Cannot send reminder email: No recipient email provided for registration {registration_id}.")
         return
+
+    event = registration.event
+    event_name = event.name
+    start_time = event.start_time
+    location = event.location
 
     subject = f"Event Reminder: {event_name}"
     message = (
@@ -68,7 +71,7 @@ def schedule_event_reminder(registration):
     If eta <= now, dispatches immediately via Celery delay().
     Gracefully catches broker connection errors to ensure registration creation does not fail.
     """
-    event = registration.ticket.event
+    event = registration.event
     event_start = event.start_time
     if timezone.is_naive(event_start):
         event_start = timezone.make_aware(event_start)

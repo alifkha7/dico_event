@@ -306,6 +306,26 @@ def test_upload_poster_permissions_unauthenticated_and_regular_user(api_client, 
     )
     assert res2.status_code == status.HTTP_403_FORBIDDEN
 
+@pytest.mark.django_db
+def test_upload_poster_organizer_other_event_forbidden(api_client, organizer_group, get_auth_header, sample_event):
+    """Verify Organizer cannot upload poster to another Organizer's event (403 Forbidden)."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    other_organizer = User.objects.create_user(
+        username='other_org_poster',
+        email='other_org_poster@dicoevent.com',
+        password='password123'
+    )
+    other_organizer.groups.add(organizer_group)
+    image = create_valid_test_image()
+    res = api_client.post(
+        '/api/events/upload/',
+        {'image': image, 'event': str(sample_event.id)},
+        format='multipart',
+        **get_auth_header(other_organizer)
+    )
+    assert res.status_code == status.HTTP_403_FORBIDDEN
+
 
 # ==========================================
 # 4. Poster Retrieval API (GET /api/events/<id>/poster/)

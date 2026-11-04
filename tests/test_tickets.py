@@ -188,12 +188,25 @@ def test_update_ticket_superuser(api_client, superuser, get_auth_header, sample_
 
 @pytest.mark.django_db
 def test_update_ticket_organizer(api_client, organizer_user, get_auth_header, sample_ticket):
-    """Verify Organizer can update ticket."""
+    """Verify Organizer can update ticket belonging to their event."""
     headers = get_auth_header(organizer_user)
     response = api_client.put(f'/api/tickets/{sample_ticket.id}/', {'quota': 150}, format='json', **headers)
     assert response.status_code == status.HTTP_200_OK
     sample_ticket.refresh_from_db()
     assert sample_ticket.quota == 150
+
+@pytest.mark.django_db
+def test_update_ticket_organizer_other_event_forbidden(api_client, organizer_group, get_auth_header, sample_ticket):
+    """Verify Organizer cannot update ticket belonging to another Organizer's event (403 Forbidden)."""
+    other_organizer = User.objects.create_user(
+        username='other_organizer',
+        email='other_organizer@dicoevent.com',
+        password='password123'
+    )
+    other_organizer.groups.add(organizer_group)
+    headers = get_auth_header(other_organizer)
+    response = api_client.put(f'/api/tickets/{sample_ticket.id}/', {'quota': 999}, format='json', **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 @pytest.mark.django_db
 def test_update_ticket_regular_user_forbidden(api_client, regular_user, get_auth_header, sample_ticket):
@@ -219,6 +232,28 @@ def test_delete_ticket_superuser_and_subsequent_404(api_client, superuser, get_a
     assert get_res1.status_code == status.HTTP_404_NOT_FOUND
     get_res2 = api_client.get(f'/api/tickets/{ticket_id}')
     assert get_res2.status_code == status.HTTP_404_NOT_FOUND
+
+@pytest.mark.django_db
+def test_delete_ticket_organizer_own_ticket(api_client, organizer_user, get_auth_header, sample_ticket):
+    """Verify Organizer can delete ticket belonging to their own event."""
+    ticket_id = sample_ticket.id
+    headers = get_auth_header(organizer_user)
+    response = api_client.delete(f'/api/tickets/{ticket_id}/', **headers)
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert not Ticket.objects.filter(id=ticket_id).exists()
+
+@pytest.mark.django_db
+def test_delete_ticket_organizer_other_event_forbidden(api_client, organizer_group, get_auth_header, sample_ticket):
+    """Verify Organizer cannot delete ticket belonging to another Organizer's event (403 Forbidden)."""
+    other_organizer = User.objects.create_user(
+        username='other_organizer_del',
+        email='other_organizer_del@dicoevent.com',
+        password='password123'
+    )
+    other_organizer.groups.add(organizer_group)
+    headers = get_auth_header(other_organizer)
+    response = api_client.delete(f'/api/tickets/{sample_ticket.id}/', **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 @pytest.mark.django_db
 def test_delete_ticket_regular_user_forbidden(api_client, regular_user, get_auth_header, sample_ticket):

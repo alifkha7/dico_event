@@ -24,6 +24,7 @@ from .serializers import (
     EventPosterUploadSerializer,
 )
 from .permissions import (
+    is_admin_user,
     IsSuperuser,
     UserViewSetPermission,
     EventViewSetPermission,
@@ -39,10 +40,19 @@ from .caching import (
     set_cached_event_list,
     invalidate_event_list_cache,
     invalidate_all_event_caches,
+    invalidate_event_caches,
 )
 from . import storage
 
 User = get_user_model()
+
+
+class PartialUpdateMixin:
+    """Mixin for ModelViewSets that defaults PUT updates to partial=True per ADR-0001 / spec."""
+    def update(self, request, *args, **kwargs):
+        kwargs['partial'] = kwargs.pop('partial', True)
+        return super().update(request, *args, **kwargs)
+
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
@@ -56,10 +66,16 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 class CustomTokenRefreshView(TokenRefreshView):
-    pass
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            logger.info("Token refreshed successfully.")
+        else:
+            logger.error("Failed token refresh attempt.")
+        return response
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('date_joined')
     serializer_class = UserSerializer
     permission_classes = [UserViewSetPermission]
@@ -76,14 +92,9 @@ class UserViewSet(viewsets.ModelViewSet):
         logger.info(f"User registered successfully: '{user.username}' (ID: {user.id})")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)  # Always allow partial updates on PUT per spec
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+    def perform_update(self, serializer):
         user = serializer.save()
         logger.info(f"User updated successfully: '{user.username}' (ID: {user.id})")
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -94,7 +105,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class GroupViewSet(viewsets.ModelViewSet):
+class GroupViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('id')
     serializer_class = GroupSerializer
     permission_classes = [IsSuperuser]
@@ -111,14 +122,9 @@ class GroupViewSet(viewsets.ModelViewSet):
         logger.info(f"Group created successfully: '{group.name}' (ID: {group.id})")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+    def perform_update(self, serializer):
         group = serializer.save()
         logger.info(f"Group updated successfully: '{group.name}' (ID: {group.id})")
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -182,7 +188,7 @@ class EventFilter(django_filters.FilterSet):
         fields = ['name', 'category', 'status', 'location', 'organizer', 'organizer_id']
 
 
-class EventViewSet(viewsets.ModelViewSet):
+class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     queryset = Event.objects.all().order_by('start_time', 'id')
     serializer_class = EventSerializer
     permission_classes = [EventViewSetPermission]
@@ -242,34 +248,29 @@ class EventViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         event = serializer.save()
-        invalidate_event_list_cache()
+        invalidate_event_caches(event.id)
         username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
         logger.info(f"Event created successfully: '{event.name}' (ID: {event.id}) by user '{username}'")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)  # Always allow partial updates on PUT per spec
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+    def perform_update(self, serializer):
         event = serializer.save()
-        invalidate_all_event_caches(pk=str(event.id))
-        username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
+        invalidate_event_caches(event.id)
+        username = self.request.user.username if self.request.user and self.request.user.is_authenticated else 'anonymous'
         logger.info(f"Event updated successfully: '{event.name}' (ID: {event.id}) by user '{username}'")
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         event_id = str(instance.id)
         event_name = instance.name
         self.perform_destroy(instance)
-        invalidate_all_event_caches(pk=event_id)
+        invalidate_event_caches(event_id)
         username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
         logger.info(f"Event deleted successfully: '{event_name}' (ID: {event_id}) by user '{username}'")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class TicketViewSet(viewsets.ModelViewSet):
+class TicketViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     queryset = Ticket.objects.all().order_by('id')
     serializer_class = TicketSerializer
     permission_classes = [TicketViewSetPermission]
@@ -293,14 +294,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         logger.info(f"Ticket created successfully: '{ticket.name}' (ID: {ticket.id})")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+    def perform_update(self, serializer):
         ticket = serializer.save()
         logger.info(f"Ticket updated successfully: '{ticket.name}' (ID: {ticket.id})")
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -311,7 +307,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class RegistrationViewSet(viewsets.ModelViewSet):
+class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     queryset = Registration.objects.all().order_by('id')
     serializer_class = RegistrationSerializer
     permission_classes = [RegistrationViewSetPermission]
@@ -343,14 +339,9 @@ class RegistrationViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+    def perform_update(self, serializer):
         registration = serializer.save()
         logger.info(f"Registration updated successfully: (ID: {registration.id})")
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -360,7 +351,7 @@ class RegistrationViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class PaymentViewSet(viewsets.ModelViewSet):
+class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     queryset = Payment.objects.all().order_by('id')
     serializer_class = PaymentSerializer
     permission_classes = [PaymentViewSetPermission]
@@ -384,14 +375,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
         logger.info(f"Payment created successfully: (ID: {payment.id}, Status: {payment.payment_status})")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+    def perform_update(self, serializer):
         payment = serializer.save()
         logger.info(f"Payment updated successfully: (ID: {payment.id}, Status: {payment.payment_status})")
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -413,6 +399,18 @@ class EventPosterUploadView(APIView):
 
         event = serializer.validated_data['event']
         image_file = serializer.validated_data['image']
+
+        # Enforce organizer ownership boundary: organizer must own the event
+        if not is_admin_user(request.user):
+            if str(event.organizer_id) != str(request.user.id):
+                logger.warning(
+                    f"Organizer '{request.user.username}' (ID: {request.user.id}) denied upload to "
+                    f"event '{event.name}' (ID: {event.id}, Organizer ID: {event.organizer_id})."
+                )
+                return Response(
+                    {"detail": "You do not have permission to upload posters for this event."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
         try:
             stored_filename = storage.upload_poster_to_minio(

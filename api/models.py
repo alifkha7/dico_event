@@ -64,6 +64,11 @@ class Registration(models.Model):
         verbose_name = "Registration"
         verbose_name_plural = "Registrations"
 
+    @property
+    def event(self):
+        """Shortcut property to access the event associated with this registration's ticket."""
+        return self.ticket.event
+
     def __str__(self):
         return f"Registration {self.id}"
 
@@ -79,6 +84,11 @@ class Payment(models.Model):
         db_table = "payments"
         verbose_name = "Payment"
         verbose_name_plural = "Payments"
+
+    @property
+    def user_id(self):
+        """Shortcut property to access the registrant's user_id without chaining through registration."""
+        return self.registration.user_id
 
     def __str__(self):
         return f"Payment {self.id} - {self.payment_status}"
