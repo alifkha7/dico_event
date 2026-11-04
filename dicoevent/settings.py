@@ -173,6 +173,10 @@ CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', f'redis://{REDIS_HOST}:{
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TIMEZONE = TIME_ZONE
 
+if USE_SQLITE or 'PYTEST_CURRENT_TEST' in os.environ:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+
 # MinIO Object Storage Settings
 MINIO_ENDPOINT_URL = os.environ.get('MINIO_ENDPOINT_URL', 'localhost:9000')
 MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
@@ -192,6 +196,7 @@ EMAIL_PORT = int(MAIL_PORT) if MAIL_PORT else 1025
 EMAIL_HOST_USER = MAIL_USER
 EMAIL_HOST_PASSWORD = MAIL_PASSWORD
 EMAIL_USE_TLS = False
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', MAIL_USER if MAIL_USER else 'noreply@dicoevent.com')
 
 # Setup Loguru Logging
 from api.logging_config import setup_logging

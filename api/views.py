@@ -294,6 +294,14 @@ class RegistrationViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         registration = serializer.save()
         logger.info(f"Registration created successfully: (ID: {registration.id})")
+
+        # Schedule reminder email
+        try:
+            from api.tasks import schedule_event_reminder
+            schedule_event_reminder(registration)
+        except Exception as e:
+            logger.error(f"Failed to schedule event reminder for registration {registration.id}: {e}")
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
