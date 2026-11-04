@@ -1,6 +1,6 @@
 # DicoEvent Backend Specification (V1 + V2 Advanced Stack)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Problem Statement
 
