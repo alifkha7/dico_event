@@ -1,7 +1,9 @@
 import django_filters
-from rest_framework import viewsets, status, filters
+from django.core.exceptions import ValidationError
+from rest_framework import viewsets, status, filters, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -9,7 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from loguru import logger
 
-from .models import Event, Ticket, Registration, Payment
+from .models import Event, Ticket, Registration, Payment, EventPoster
 from .serializers import (
     UserSerializer,
     GroupSerializer,
@@ -18,6 +20,8 @@ from .serializers import (
     TicketSerializer,
     RegistrationSerializer,
     PaymentSerializer,
+    EventPosterSerializer,
+    EventPosterUploadSerializer,
 )
 from .permissions import (
     IsSuperuser,
@@ -26,7 +30,9 @@ from .permissions import (
     TicketViewSetPermission,
     RegistrationViewSetPermission,
     PaymentViewSetPermission,
+    CanUploadPosterPermission,
 )
+from . import storage
 
 User = get_user_model()
 
@@ -346,3 +352,67 @@ class PaymentViewSet(viewsets.ModelViewSet):
         self.perform_destroy(instance)
         logger.info(f"Payment deleted successfully: (ID: {payment_id})")
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class EventPosterUploadView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+    permission_classes = [CanUploadPosterPermission]
+
+    def post(self, request, *args, **kwargs):
+        serializer = EventPosterUploadSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            logger.error(f"Event poster upload validation failed: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        event = serializer.validated_data['event']
+        image_file = serializer.validated_data['image']
+
+        try:
+            stored_filename = storage.upload_poster_to_minio(
+                file_obj=image_file,
+                filename=image_file.name,
+                content_type=getattr(image_file, 'content_type', 'image/jpeg')
+            )
+        except Exception as exc:
+            logger.error(f"Failed to upload poster to MinIO: {exc}")
+            return Response({"error": "Storage service unavailable."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        poster = EventPoster.objects.create(
+            event=event,
+            image=stored_filename,
+        )
+        username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
+        logger.info(
+            f"Poster uploaded successfully for event '{event.name}' (ID: {event.id}): '{stored_filename}' "
+            f"(Poster ID: {poster.id}) by user '{username}'"
+        )
+        return Response(
+            {
+                "id": str(poster.id),
+                "image": poster.image,
+                "event": str(poster.event_id),
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class EventPostersListView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, event_id, *args, **kwargs):
+        try:
+            event = Event.objects.get(id=event_id)
+        except (Event.DoesNotExist, ValueError, ValidationError):
+            return Response({"detail": "Event not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        posters = EventPoster.objects.filter(event=event).order_by('id')
+        data = [
+            {
+                "id": str(p.id),
+                "image": p.image,
+                "event": str(p.event_id),
+            }
+            for p in posters
+        ]
+        logger.info(f"Retrieved {len(data)} posters for event '{event.name}' (ID: {event.id})")
+        return Response(data, status=status.HTTP_200_OK)

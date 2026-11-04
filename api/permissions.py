@@ -28,6 +28,13 @@ class IsAdminOrSuperuser(permissions.BasePermission):
     def has_permission(self, request, view):
         return bool(is_admin_user(request.user))
 
+class CanUploadPosterPermission(permissions.BasePermission):
+    """Allows access to authenticated Superuser, Admin, or Organizer to upload posters."""
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return can_create_or_manage_events(request.user)
+
 class UserViewSetPermission(permissions.BasePermission):
     """
     Permission logic for UserViewSet:
