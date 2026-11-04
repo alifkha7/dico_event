@@ -4,7 +4,7 @@
 
 **Blocked by:** 02: Events CRUD, Organizer Ownership RBAC & Paginated Queries
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] MinIO client credentials are configured strictly from `MINIO_ENDPOINT_URL`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` environment variables, using the official `minio` Python SDK.
 - [ ] `EventPoster` entity uses a UUID primary key (`id`), references `Event` (`on_delete=CASCADE`), and stores the uploaded `image` filename/object key.

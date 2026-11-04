@@ -4,7 +4,7 @@
 
 **Blocked by:** 02: Events CRUD, Organizer Ownership RBAC & Paginated Queries
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `Ticket` entity uses a UUID primary key (`id`), references `Event` (`on_delete=CASCADE`), and stores `name`, `price` (number), `sales_start`, `sales_end`, and `quota` (number).
 - [ ] `POST /api/tickets/` creates a Ticket (`201 Created`), `GET /api/tickets/` returns `{"tickets": [...]}` (`200 OK`), `GET /api/tickets/<id>[/]` returns Ticket details with `event` as a UUID string (`200 OK`), `PUT /api/tickets/<id>/` updates the Ticket (`200 OK`), and `DELETE /api/tickets/<id>/` deletes the Ticket (`204 No Content`, subsequent `GET` -> `404 Not Found`).
