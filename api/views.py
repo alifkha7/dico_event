@@ -9,17 +9,23 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from loguru import logger
 
-from .models import Event
+from .models import Event, Ticket, Registration, Payment
 from .serializers import (
     UserSerializer,
     GroupSerializer,
     AssignRoleSerializer,
     EventSerializer,
+    TicketSerializer,
+    RegistrationSerializer,
+    PaymentSerializer,
 )
 from .permissions import (
     IsSuperuser,
     UserViewSetPermission,
     EventViewSetPermission,
+    TicketViewSetPermission,
+    RegistrationViewSetPermission,
+    PaymentViewSetPermission,
 )
 
 User = get_user_model()
@@ -215,4 +221,128 @@ class EventViewSet(viewsets.ModelViewSet):
         self.perform_destroy(instance)
         username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
         logger.info(f"Event deleted successfully: '{event_name}' (ID: {event_id}) by user '{username}'")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TicketViewSet(viewsets.ModelViewSet):
+    queryset = Ticket.objects.all().order_by('id')
+    serializer_class = TicketSerializer
+    permission_classes = [TicketViewSetPermission]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        logger.info(f"Listing tickets: count={len(serializer.data)}")
+        return Response({"tickets": serializer.data})
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        logger.info(f"Retrieved ticket: '{instance.name}' (ID: {instance.id})")
+        return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ticket = serializer.save()
+        logger.info(f"Ticket created successfully: '{ticket.name}' (ID: {ticket.id})")
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        ticket = serializer.save()
+        logger.info(f"Ticket updated successfully: '{ticket.name}' (ID: {ticket.id})")
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        ticket_id = str(instance.id)
+        ticket_name = instance.name
+        self.perform_destroy(instance)
+        logger.info(f"Ticket deleted successfully: '{ticket_name}' (ID: {ticket_id})")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RegistrationViewSet(viewsets.ModelViewSet):
+    queryset = Registration.objects.all().order_by('id')
+    serializer_class = RegistrationSerializer
+    permission_classes = [RegistrationViewSetPermission]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        logger.info(f"Listing registrations: count={len(serializer.data)}")
+        return Response({"registrations": serializer.data})
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        logger.info(f"Retrieved registration: (ID: {instance.id})")
+        return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        registration = serializer.save()
+        logger.info(f"Registration created successfully: (ID: {registration.id})")
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        registration = serializer.save()
+        logger.info(f"Registration updated successfully: (ID: {registration.id})")
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        reg_id = str(instance.id)
+        self.perform_destroy(instance)
+        logger.info(f"Registration deleted successfully: (ID: {reg_id})")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PaymentViewSet(viewsets.ModelViewSet):
+    queryset = Payment.objects.all().order_by('id')
+    serializer_class = PaymentSerializer
+    permission_classes = [PaymentViewSetPermission]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        logger.info(f"Listing payments: count={len(serializer.data)}")
+        return Response({"payments": serializer.data})
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        logger.info(f"Retrieved payment: (ID: {instance.id})")
+        return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payment = serializer.save()
+        logger.info(f"Payment created successfully: (ID: {payment.id}, Status: {payment.payment_status})")
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        payment = serializer.save()
+        logger.info(f"Payment updated successfully: (ID: {payment.id}, Status: {payment.payment_status})")
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        payment_id = str(instance.id)
+        self.perform_destroy(instance)
+        logger.info(f"Payment deleted successfully: (ID: {payment_id})")
         return Response(status=status.HTTP_204_NO_CONTENT)

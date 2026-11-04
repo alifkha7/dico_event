@@ -93,3 +93,80 @@ class EventViewSetPermission(permissions.BasePermission):
         if is_organizer_user(request.user):
             return str(obj.organizer_id) == str(request.user.id)
         return False
+
+class TicketViewSetPermission(permissions.BasePermission):
+    """
+    Permission logic for TicketViewSet:
+    - GET (list): AllowAny
+    - GET (retrieve): AllowAny per ADR-0001
+    - POST (create): Authenticated Superuser, Admin, or Organizer
+    - PUT / PATCH (update): Authenticated Superuser, Admin, or Organizer
+    - DELETE (destroy): Authenticated Superuser, Admin, or Organizer
+    """
+    def has_permission(self, request, view):
+        if view.action in ['list', 'retrieve']:
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return can_create_or_manage_events(request.user)
+
+    def has_object_permission(self, request, view, obj):
+        if view.action == 'retrieve':
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return can_create_or_manage_events(request.user)
+
+class RegistrationViewSetPermission(permissions.BasePermission):
+    """
+    Permission logic for RegistrationViewSet:
+    - GET (list): Admin or Superuser only (regular user gets 403)
+    - GET (retrieve): AllowAny per ADR-0001
+    - POST (create): Authenticated users (User, Organizer, Admin, Superuser)
+    - PUT / PATCH (update): Admin, Superuser, or owner User
+    - DELETE (destroy): Admin, Superuser, or owner User
+    """
+    def has_permission(self, request, view):
+        if view.action == 'retrieve':
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if view.action == 'list':
+            return is_admin_user(request.user)
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if view.action == 'retrieve':
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if is_admin_user(request.user):
+            return True
+        return str(obj.user_id) == str(request.user.id)
+
+class PaymentViewSetPermission(permissions.BasePermission):
+    """
+    Permission logic for PaymentViewSet:
+    - GET (list): Admin or Superuser only (regular user gets 403)
+    - GET (retrieve): AllowAny per ADR-0001
+    - POST (create): Authenticated users (User, Organizer, Admin, Superuser)
+    - PUT / PATCH (update): Admin, Superuser, or owner User
+    - DELETE (destroy): Admin, Superuser, or owner User
+    """
+    def has_permission(self, request, view):
+        if view.action == 'retrieve':
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if view.action == 'list':
+            return is_admin_user(request.user)
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if view.action == 'retrieve':
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if is_admin_user(request.user):
+            return True
+        return str(obj.registration.user_id) == str(request.user.id)
