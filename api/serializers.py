@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from .models import Event
 
 User = get_user_model()
 
@@ -81,3 +82,68 @@ class AssignRoleSerializer(serializers.Serializer):
             return group
         except Group.DoesNotExist:
             raise serializers.ValidationError("Group not found.")
+
+
+class EventSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(read_only=True)
+    quota = serializers.IntegerField(required=False)
+    organizer_id = serializers.CharField(required=False, write_only=False)
+
+    class Meta:
+        model = Event
+        fields = [
+            'id',
+            'name',
+            'description',
+            'location',
+            'start_time',
+            'end_time',
+            'status',
+            'quota',
+            'category',
+            'organizer_id',
+            'organizer',
+        ]
+        read_only_fields = ['id', 'organizer']
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+
+        # Check required fields on creation
+        if self.instance is None:
+            required_fields = ['name', 'description', 'location', 'start_time', 'end_time', 'status', 'quota', 'category']
+            missing = [f for f in required_fields if f not in attrs and f not in self.initial_data]
+            if missing:
+                raise serializers.ValidationError({f: "This field is required." for f in missing})
+
+        organizer_raw = (
+            self.initial_data.get('organizer_id')
+            or self.initial_data.get('organizer')
+            or attrs.get('organizer_id')
+        )
+
+        if organizer_raw:
+            if isinstance(organizer_raw, User):
+                attrs['organizer'] = organizer_raw
+            else:
+                try:
+                    organizer_user = User.objects.get(id=organizer_raw)
+                    attrs['organizer'] = organizer_user
+                except Exception:
+                    raise serializers.ValidationError({"organizer_id": "User not found."})
+        elif self.instance is None:
+            if request and request.user and request.user.is_authenticated:
+                attrs['organizer'] = request.user
+            else:
+                raise serializers.ValidationError({"organizer_id": "Organizer is required."})
+
+        attrs.pop('organizer_id', None)
+        return attrs
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['id'] = str(instance.id)
+        ret['organizer'] = str(instance.organizer_id)
+        ret['organizer_id'] = str(instance.organizer_id)
+        ret['quota'] = int(instance.quota)
+        return ret
