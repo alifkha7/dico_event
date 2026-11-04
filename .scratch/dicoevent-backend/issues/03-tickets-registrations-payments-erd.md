@@ -4,16 +4,16 @@
 
 **Blocked by:** 02: Events CRUD, Organizer Ownership RBAC & Paginated Queries
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] `Ticket` entity uses a UUID primary key (`id`), references `Event` (`on_delete=CASCADE`), and stores `name`, `price` (number), `sales_start`, `sales_end`, and `quota` (number).
-- [ ] `POST /api/tickets/` creates a Ticket (`201 Created`), `GET /api/tickets/` returns `{"tickets": [...]}` (`200 OK`), `GET /api/tickets/<id>[/]` returns Ticket details with `event` as a UUID string (`200 OK`), `PUT /api/tickets/<id>/` updates the Ticket (`200 OK`), and `DELETE /api/tickets/<id>/` deletes the Ticket (`204 No Content`, subsequent `GET` -> `404 Not Found`).
-- [ ] `Registration` entity uses a UUID primary key (`id`) and references `Ticket` (`on_delete=CASCADE`) and `User` (`on_delete=CASCADE`).
-- [ ] `POST /api/registrations/` with `{"ticket_id", "user_id"}` creates a Registration and returns `201 Created` with `id`, `ticket` (UUID string), and `user` (UUID string).
-- [ ] `GET /api/registrations/` returns `{"registrations": [...]}` for `Admin` and `Superuser` (`200 OK`), `GET /api/registrations/<id>[/]` returns Registration details (`200 OK`), `PUT /api/registrations/<id>/` updates the Registration (`200 OK`), and `DELETE /api/registrations/<id>/` deletes it (`204 No Content`, subsequent `GET` -> `404 Not Found`).
-- [ ] `Payment` entity uses a UUID primary key (`id`), references `Registration` (`on_delete=CASCADE`), and stores `payment_method`, `payment_status`, and `amount_paid` (number).
-- [ ] `POST /api/payments/` with `{"registration_id", "payment_method", "payment_status", "amount_paid"}` creates a Payment and returns `201 Created` with `id`, `registration` (UUID string), `payment_method`, `payment_status`, and `amount_paid`.
-- [ ] `GET /api/payments/` returns `{"payments": [...]}` for `Admin` and `Superuser` (`200 OK`), `GET /api/payments/<id>[/]` returns Payment details (`200 OK`), `PUT /api/payments/<id>/` updates the Payment (`200 OK`, normalizing `"completed"` to `"Completed"` per ADR-0001), and `DELETE /api/payments/<id>/` deletes the Payment (`204 No Content`).
-- [ ] Deleting a Ticket (`DELETE /api/tickets/<id>/`) cascades and deletes its associated Registrations and Payments so that subsequent `GET /api/payments/<paymentId>[/]` returns `404 Not Found` (per ADR-0001).
-- [ ] An Entity Relationship Diagram image depicting the normalized DicoEvent schema is generated and saved at the repository root as `ERD-DicoEvent-versi-1.png` (and `ERD-DicoEvent-versi-1.jpg`).
-- [ ] Automated HTTP API tests verify all `[Mandatory] Tickets`, `[Mandatory] Registrations`, and `[Mandatory] Payments` Postman scenarios.
+- [x] `Ticket` entity uses a UUID primary key (`id`), references `Event` (`on_delete=CASCADE`), and stores `name`, `price` (number), `sales_start`, `sales_end`, and `quota` (number).
+- [x] `POST /api/tickets/` creates a Ticket (`201 Created`), `GET /api/tickets/` returns `{"tickets": [...]}` (`200 OK`), `GET /api/tickets/<id>[/]` returns Ticket details with `event` as a UUID string (`200 OK`), `PUT /api/tickets/<id>/` updates the Ticket (`200 OK`), and `DELETE /api/tickets/<id>/` deletes the Ticket (`204 No Content`, subsequent `GET` -> `404 Not Found`).
+- [x] `Registration` entity uses a UUID primary key (`id`) and references `Ticket` (`on_delete=CASCADE`) and `User` (`on_delete=CASCADE`).
+- [x] `POST /api/registrations/` with `{"ticket_id", "user_id"}` creates a Registration and returns `201 Created` with `id`, `ticket` (UUID string), and `user` (UUID string).
+- [x] `GET /api/registrations/` returns `{"registrations": [...]}` for `Admin` and `Superuser` (`200 OK`), `GET /api/registrations/<id>[/]` returns Registration details (`200 OK`), `PUT /api/registrations/<id>/` updates the Registration (`200 OK`), and `DELETE /api/registrations/<id>/` deletes it (`204 No Content`, subsequent `GET` -> `404 Not Found`).
+- [x] `Payment` entity uses a UUID primary key (`id`), references `Registration` (`on_delete=CASCADE`), and stores `payment_method`, `payment_status`, and `amount_paid` (number).
+- [x] `POST /api/payments/` with `{"registration_id", "payment_method", "payment_status", "amount_paid"}` creates a Payment and returns `201 Created` with `id`, `registration` (UUID string), `payment_method`, `payment_status`, and `amount_paid`.
+- [x] `GET /api/payments/` returns `{"payments": [...]}` for `Admin` and `Superuser` (`200 OK`), `GET /api/payments/<id>[/]` returns Payment details (`200 OK`), `PUT /api/payments/<id>/` updates the Payment (`200 OK`, normalizing `"completed"` to `"Completed"` per ADR-0001), and `DELETE /api/payments/<id>/` deletes the Payment (`204 No Content`).
+- [x] Deleting a Ticket (`DELETE /api/tickets/<id>/`) cascades and deletes its associated Registrations and Payments so that subsequent `GET /api/payments/<paymentId>[/]` returns `404 Not Found` (per ADR-0001).
+- [x] An Entity Relationship Diagram image depicting the normalized DicoEvent schema is generated and saved at the repository root as `ERD-DicoEvent-versi-1.png` (and `ERD-DicoEvent-versi-1.jpg`).
+- [x] Automated HTTP API tests verify all `[Mandatory] Tickets`, `[Mandatory] Registrations`, and `[Mandatory] Payments` Postman scenarios.

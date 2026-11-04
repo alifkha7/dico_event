@@ -34,3 +34,51 @@ class Event(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Ticket(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="tickets")
+    name = models.CharField(max_length=255)
+    price = models.IntegerField()
+    sales_start = models.DateTimeField()
+    sales_end = models.DateTimeField()
+    quota = models.IntegerField()
+
+    class Meta:
+        db_table = "tickets"
+        verbose_name = "Ticket"
+        verbose_name_plural = "Tickets"
+
+    def __str__(self):
+        return self.name
+
+
+class Registration(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="registrations")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="registrations")
+
+    class Meta:
+        db_table = "registrations"
+        verbose_name = "Registration"
+        verbose_name_plural = "Registrations"
+
+    def __str__(self):
+        return f"Registration {self.id}"
+
+
+class Payment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name="payments")
+    payment_method = models.CharField(max_length=100)
+    payment_status = models.CharField(max_length=100)
+    amount_paid = models.IntegerField()
+
+    class Meta:
+        db_table = "payments"
+        verbose_name = "Payment"
+        verbose_name_plural = "Payments"
+
+    def __str__(self):
+        return f"Payment {self.id} - {self.payment_status}"

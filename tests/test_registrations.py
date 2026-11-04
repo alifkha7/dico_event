@@ -1,0 +1,232 @@
+import uuid
+from datetime import datetime, timezone, timedelta
+import pytest
+from rest_framework import status
+from django.contrib.auth import get_user_model
+from api.models import Event, Ticket, Registration
+
+User = get_user_model()
+
+@pytest.fixture
+def sample_ticket(organizer_user):
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name='Tech Conference 2026',
+        description='Conference description',
+        location='Jakarta',
+        start_time=now + timedelta(days=5),
+        end_time=now + timedelta(days=6),
+        status='published',
+        quota=200,
+        category='Tech',
+        organizer=organizer_user,
+    )
+    return Ticket.objects.create(
+        event=event,
+        name='General Admission',
+        price=100000,
+        sales_start=now,
+        sales_end=now + timedelta(days=4),
+        quota=100,
+    )
+
+@pytest.fixture
+def another_regular_user(db):
+    return User.objects.create_user(
+        username='another_user',
+        email='another@dicoevent.com',
+        password='password123',
+    )
+
+@pytest.fixture
+def sample_registration(sample_ticket, regular_user):
+    return Registration.objects.create(
+        ticket=sample_ticket,
+        user=regular_user,
+    )
+
+# ==========================================
+# 1. Registration Creation (POST)
+# ==========================================
+
+@pytest.mark.django_db
+def test_create_registration_authenticated_user(api_client, regular_user, get_auth_header, sample_ticket):
+    """Verify authenticated user can create registration with ticket_id and user_id."""
+    headers = get_auth_header(regular_user)
+    payload = {
+        'ticket_id': str(sample_ticket.id),
+        'user_id': str(regular_user.id),
+    }
+    response = api_client.post('/api/registrations/', payload, format='json', **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert 'id' in response.data
+    assert uuid.UUID(response.data['id'])
+    assert response.data['ticket'] == str(sample_ticket.id)
+    assert response.data['ticket_id'] == str(sample_ticket.id)
+    assert response.data['user'] == str(regular_user.id)
+    assert response.data['user_id'] == str(regular_user.id)
+
+@pytest.mark.django_db
+def test_create_registration_accepts_ticket_and_defaults_user(api_client, regular_user, get_auth_header, sample_ticket):
+    """Verify registration accepts 'ticket' field and defaults user to request.user."""
+    headers = get_auth_header(regular_user)
+    payload = {
+        'ticket': str(sample_ticket.id),
+    }
+    response = api_client.post('/api/registrations/', payload, format='json', **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data['ticket'] == str(sample_ticket.id)
+    assert response.data['user'] == str(regular_user.id)
+
+@pytest.mark.django_db
+def test_create_registration_no_trailing_slash(api_client, regular_user, get_auth_header, sample_ticket):
+    """Verify POST /api/registrations (without trailing slash) works per ADR-0001."""
+    headers = get_auth_header(regular_user)
+    payload = {
+        'ticket_id': str(sample_ticket.id),
+        'user_id': str(regular_user.id),
+    }
+    response = api_client.post('/api/registrations', payload, format='json', **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+
+@pytest.mark.django_db
+def test_create_registration_unauthenticated(api_client, sample_ticket, regular_user):
+    """Verify unauthenticated registration attempt returns 401 Unauthorized."""
+    payload = {
+        'ticket_id': str(sample_ticket.id),
+        'user_id': str(regular_user.id),
+    }
+    response = api_client.post('/api/registrations/', payload, format='json')
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+# ==========================================
+# 2. Registration Listing (GET /api/registrations/)
+# ==========================================
+
+@pytest.mark.django_db
+def test_list_registrations_superuser(api_client, superuser, get_auth_header, sample_registration):
+    """Verify Superuser can list registrations wrapped in {"registrations": [...] }."""
+    headers = get_auth_header(superuser)
+    response = api_client.get('/api/registrations/', **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'registrations' in response.data
+    assert any(r['id'] == str(sample_registration.id) for r in response.data['registrations'])
+
+@pytest.mark.django_db
+def test_list_registrations_admin(api_client, admin_user, get_auth_header, sample_registration):
+    """Verify Admin can list registrations."""
+    headers = get_auth_header(admin_user)
+    response = api_client.get('/api/registrations/', **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'registrations' in response.data
+
+@pytest.mark.django_db
+def test_list_registrations_no_trailing_slash(api_client, admin_user, get_auth_header, sample_registration):
+    """Verify GET /api/registrations without trailing slash works."""
+    headers = get_auth_header(admin_user)
+    response = api_client.get('/api/registrations', **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'registrations' in response.data
+
+@pytest.mark.django_db
+def test_list_registrations_regular_user_forbidden(api_client, regular_user, get_auth_header, sample_registration):
+    """Verify standard User cannot list registrations (403 Forbidden)."""
+    headers = get_auth_header(regular_user)
+    response = api_client.get('/api/registrations/', **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+@pytest.mark.django_db
+def test_list_registrations_unauthenticated(api_client, sample_registration):
+    """Verify unauthenticated listing returns 401 Unauthorized."""
+    response = api_client.get('/api/registrations/')
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+# ==========================================
+# 3. Registration Retrieval (GET /api/registrations/<id>/)
+# ==========================================
+
+@pytest.mark.django_db
+def test_retrieve_registration_allow_any(api_client, sample_registration):
+    """Verify unauthenticated GET /api/registrations/<id>/ returns 200 OK per ADR-0001."""
+    response = api_client.get(f'/api/registrations/{sample_registration.id}/')
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['id'] == str(sample_registration.id)
+    assert response.data['ticket'] == str(sample_registration.ticket_id)
+    assert response.data['user'] == str(sample_registration.user_id)
+
+@pytest.mark.django_db
+def test_retrieve_registration_no_trailing_slash(api_client, sample_registration):
+    """Verify unauthenticated GET /api/registrations/<id> works without trailing slash."""
+    response = api_client.get(f'/api/registrations/{sample_registration.id}')
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['id'] == str(sample_registration.id)
+
+@pytest.mark.django_db
+def test_retrieve_registration_not_found(api_client):
+    """Verify GET /api/registrations/<nonexistent_id>/ returns 404 Not Found."""
+    random_id = uuid.uuid4()
+    response = api_client.get(f'/api/registrations/{random_id}/')
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+# ==========================================
+# 4. Registration Update (PUT /api/registrations/<id>/)
+# ==========================================
+
+@pytest.mark.django_db
+def test_update_registration_owner(api_client, regular_user, get_auth_header, sample_registration, sample_ticket):
+    """Verify owner User can update their registration."""
+    headers = get_auth_header(regular_user)
+    response = api_client.put(
+        f'/api/registrations/{sample_registration.id}/',
+        {'ticket_id': str(sample_ticket.id)},
+        format='json',
+        **headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+@pytest.mark.django_db
+def test_update_registration_admin(api_client, admin_user, get_auth_header, sample_registration, sample_ticket):
+    """Verify Admin can update any registration."""
+    headers = get_auth_header(admin_user)
+    response = api_client.put(
+        f'/api/registrations/{sample_registration.id}/',
+        {'ticket_id': str(sample_ticket.id)},
+        format='json',
+        **headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+@pytest.mark.django_db
+def test_update_registration_non_owner_forbidden(api_client, another_regular_user, get_auth_header, sample_registration, sample_ticket):
+    """Verify non-owner User cannot update registration (403 Forbidden)."""
+    headers = get_auth_header(another_regular_user)
+    response = api_client.put(
+        f'/api/registrations/{sample_registration.id}/',
+        {'ticket_id': str(sample_ticket.id)},
+        format='json',
+        **headers
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+# ==========================================
+# 5. Registration Deletion (DELETE /api/registrations/<id>/)
+# ==========================================
+
+@pytest.mark.django_db
+def test_delete_registration_owner_and_subsequent_404(api_client, regular_user, get_auth_header, sample_registration):
+    """Verify owner User can delete registration and subsequent GET returns 404."""
+    reg_id = sample_registration.id
+    headers = get_auth_header(regular_user)
+    response = api_client.delete(f'/api/registrations/{reg_id}/', **headers)
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    # Subsequent GET returns 404
+    get_res = api_client.get(f'/api/registrations/{reg_id}/')
+    assert get_res.status_code == status.HTTP_404_NOT_FOUND
+
+@pytest.mark.django_db
+def test_delete_registration_non_owner_forbidden(api_client, another_regular_user, get_auth_header, sample_registration):
+    """Verify non-owner User cannot delete registration (403 Forbidden)."""
+    headers = get_auth_header(another_regular_user)
+    response = api_client.delete(f'/api/registrations/{sample_registration.id}/', **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
