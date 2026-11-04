@@ -8,6 +8,16 @@ def is_admin_user(user):
         return True
     return user.groups.filter(name__iexact='admin').exists()
 
+def is_organizer_user(user):
+    """Check if user is a member of an 'organizer' group (case-insensitive)."""
+    if not user or not user.is_authenticated:
+        return False
+    return user.groups.filter(name__iexact='organizer').exists()
+
+def can_create_or_manage_events(user):
+    """Check if user has permission to create or manage events."""
+    return is_admin_user(user) or is_organizer_user(user)
+
 class IsSuperuser(permissions.BasePermission):
     """Allows access only to superusers."""
     def has_permission(self, request, view):
@@ -45,4 +55,41 @@ class UserViewSetPermission(permissions.BasePermission):
             return False
         if is_admin_user(request.user):
             return True
-        return obj.id == request.user.id
+        return str(obj.id) == str(request.user.id)
+
+class EventViewSetPermission(permissions.BasePermission):
+    """
+    Permission logic for EventViewSet:
+    - GET (list): AllowAny per ADR-0001 / spec
+    - GET (retrieve): AllowAny per ADR-0001
+    - POST (create): Superuser, Admin, or Organizer
+    - PUT / PATCH (update):
+        - Superuser or Admin on any event
+        - Organizer only if event.organizer_id == request.user.id
+        - Others forbidden (403)
+    - DELETE (destroy):
+        - Superuser or Admin on any event
+        - Organizer only if event.organizer_id == request.user.id
+        - Others forbidden (403)
+    """
+    def has_permission(self, request, view):
+        if view.action in ['list', 'retrieve']:
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if view.action == 'create':
+            return can_create_or_manage_events(request.user)
+        if view.action in ['update', 'partial_update', 'destroy']:
+            return can_create_or_manage_events(request.user)
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        if view.action == 'retrieve':
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if is_admin_user(request.user):
+            return True
+        if is_organizer_user(request.user):
+            return str(obj.organizer_id) == str(request.user.id)
+        return False

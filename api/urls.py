@@ -5,6 +5,7 @@ from .views import (
     UserViewSet,
     GroupViewSet,
     AssignRoleView,
+    EventViewSet,
 )
 
 urlpatterns = [
@@ -41,4 +42,19 @@ urlpatterns = [
         name='group-detail'
     ),
     re_path(r'^assign-roles/?$', AssignRoleView.as_view(), name='assign-roles'),
+    re_path(
+        r'^events/?$',
+        EventViewSet.as_view({'get': 'list', 'post': 'create'}),
+        name='event-list'
+    ),
+    re_path(
+        r'^events/(?P<pk>[^/]+)/?$',
+        EventViewSet.as_view({
+            'get': 'retrieve',
+            'put': 'update',
+            'patch': 'partial_update',
+            'delete': 'destroy'
+        }),
+        name='event-detail'
+    ),
 ]
