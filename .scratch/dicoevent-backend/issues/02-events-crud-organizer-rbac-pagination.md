@@ -4,7 +4,7 @@
 
 **Blocked by:** 01: Foundation, Custom User Auth (JWT 3h), Groups, Role Assignment & Loguru Logging
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `Event` entity uses a UUID primary key (`id`) and stores `name`, `description`, `location`, `start_time`, `end_time`, `status`, `quota` (integer), `category`, and `organizer` (referencing `User`).
 - [ ] `POST /api/events/` by a `Superuser`, `Admin`, or `Organizer` creates an Event and returns `201 Created` with `id` (UUID string), `name`, `description`, `location`, `start_time`, `end_time`, `status`, `category`, and `quota` (number).
