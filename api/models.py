@@ -34,3 +34,17 @@ class Event(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class EventPoster(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="posters")
+    image = models.CharField(max_length=500)
+
+    class Meta:
+        db_table = 'event_posters'
+        verbose_name = 'Event Poster'
+        verbose_name_plural = 'Event Posters'
+
+    def __str__(self):
+        return f"Poster for {self.event.name}: {self.image}"

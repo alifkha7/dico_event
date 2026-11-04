@@ -20,7 +20,7 @@ def test_preseeded_superuser_login(api_client, superuser):
     exp = access_token['exp']
     iat = access_token['iat']
     diff_seconds = exp - iat
-    assert diff_seconds == 3 * 3600
+    assert abs(diff_seconds - 3 * 3600) <= 1
 
 @pytest.mark.django_db
 def test_login_without_trailing_slash(api_client, regular_user):

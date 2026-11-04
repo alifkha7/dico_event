@@ -6,6 +6,8 @@ from .views import (
     GroupViewSet,
     AssignRoleView,
     EventViewSet,
+    EventPosterUploadView,
+    EventPostersListView,
 )
 
 urlpatterns = [
@@ -47,6 +49,8 @@ urlpatterns = [
         EventViewSet.as_view({'get': 'list', 'post': 'create'}),
         name='event-list'
     ),
+    re_path(r'^events/upload/?$', EventPosterUploadView.as_view(), name='event-poster-upload'),
+    re_path(r'^events/(?P<event_id>[^/]+)/posters?/?$', EventPostersListView.as_view(), name='event-posters-list'),
     re_path(
         r'^events/(?P<pk>[^/]+)/?$',
         EventViewSet.as_view({
