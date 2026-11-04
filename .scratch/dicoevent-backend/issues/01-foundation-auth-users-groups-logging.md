@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Project dependencies are declared in a Pipfile targeting Django LTS 4.2 and Django REST Framework, and backing services (PostgreSQL, Redis, MinIO, Mailpit) are defined for local development.
 - [ ] PostgreSQL connection settings are read from `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_HOST`, and `DATABASE_PORT` environment variables.
