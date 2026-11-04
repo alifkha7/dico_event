@@ -4,7 +4,7 @@
 
 **Blocked by:** 03: Tickets, Registrations, Payments & V1 ERD
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Celery broker URL is read from the `CELERY_BROKER_URL` environment variable.
 - [ ] Django email SMTP configuration is read from `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, and `MAIL_PASSWORD` environment variables.
