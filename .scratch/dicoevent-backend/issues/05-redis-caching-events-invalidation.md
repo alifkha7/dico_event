@@ -4,7 +4,7 @@
 
 **Blocked by:** 04: Event Poster Upload & MinIO Object Storage
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Redis cache connection is configured using the `REDIS_HOST` environment variable with a cache TTL of 1 hour (`3600` seconds).
 - [ ] On a cache miss for `GET /api/events/` or `GET /api/events/<id>/`, the API fetches data from PostgreSQL, populates Redis for 1 hour, and returns `200 OK` with response header `X-Data-Source: database`.
