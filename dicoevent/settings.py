@@ -5,6 +5,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from api.logging_config import setup_logging
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -222,6 +224,4 @@ EMAIL_USE_TLS = False
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", MAIL_USER if MAIL_USER else "noreply@dicoevent.com")
 
 # Setup Loguru Logging
-from api.logging_config import setup_logging
-
 setup_logging(BASE_DIR)

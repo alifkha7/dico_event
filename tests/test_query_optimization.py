@@ -27,6 +27,19 @@ def test_event_model_database_indexes():
     assert ("category",) in index_fields, "Event._meta.indexes missing index on ('category',)"
 
 
+def _has_select_related(queryset, lookup: str) -> bool:
+    """Helper to verify select_related fields without exposing dict internals."""
+    parts = lookup.split("__")
+    current = getattr(queryset.query, "select_related", None)
+    if not isinstance(current, dict):
+        return False
+    for part in parts:
+        if part not in current:
+            return False
+        current = current[part]
+    return True
+
+
 def test_viewsets_querysets_configured_with_eager_loading():
     """Verify each ModelViewSet explicitly defines eager-loading on its queryset per spec."""
     from api.views import (
@@ -41,25 +54,31 @@ def test_viewsets_querysets_configured_with_eager_loading():
     assert "groups" in UserViewSet.queryset._prefetch_related_lookups, "UserViewSet missing prefetch_related('groups')"
 
     # EventViewSet: select_related('organizer')
-    event_sr = EventViewSet.queryset.query.select_related
-    assert isinstance(event_sr, dict) and "organizer" in event_sr, "EventViewSet missing select_related('organizer')"
+    assert _has_select_related(EventViewSet.queryset, "organizer"), "EventViewSet missing select_related('organizer')"
 
     # TicketViewSet: select_related('event', 'event__organizer')
-    ticket_sr = TicketViewSet.queryset.query.select_related
-    assert isinstance(ticket_sr, dict) and "event" in ticket_sr and "organizer" in ticket_sr["event"], (
-        "TicketViewSet missing select_related('event', 'event__organizer')"
+    assert _has_select_related(TicketViewSet.queryset, "event"), "TicketViewSet missing select_related('event')"
+    assert _has_select_related(TicketViewSet.queryset, "event__organizer"), (
+        "TicketViewSet missing select_related('event__organizer')"
     )
 
     # RegistrationViewSet: select_related('ticket', 'ticket__event', 'user')
-    reg_sr = RegistrationViewSet.queryset.query.select_related
-    assert isinstance(reg_sr, dict) and "ticket" in reg_sr and "event" in reg_sr["ticket"] and "user" in reg_sr, (
-        "RegistrationViewSet missing select_related('ticket', 'ticket__event', 'user')"
+    assert _has_select_related(RegistrationViewSet.queryset, "ticket"), (
+        "RegistrationViewSet missing select_related('ticket')"
+    )
+    assert _has_select_related(RegistrationViewSet.queryset, "ticket__event"), (
+        "RegistrationViewSet missing select_related('ticket__event')"
+    )
+    assert _has_select_related(RegistrationViewSet.queryset, "user"), (
+        "RegistrationViewSet missing select_related('user')"
     )
 
     # PaymentViewSet: select_related('registration', 'registration__user')
-    pay_sr = PaymentViewSet.queryset.query.select_related
-    assert isinstance(pay_sr, dict) and "registration" in pay_sr and "user" in pay_sr["registration"], (
-        "PaymentViewSet missing select_related('registration', 'registration__user')"
+    assert _has_select_related(PaymentViewSet.queryset, "registration"), (
+        "PaymentViewSet missing select_related('registration')"
+    )
+    assert _has_select_related(PaymentViewSet.queryset, "registration__user"), (
+        "PaymentViewSet missing select_related('registration__user')"
     )
 
 
@@ -69,7 +88,7 @@ def test_viewsets_querysets_configured_with_eager_loading():
 
 
 @pytest.mark.django_db
-def test_users_list_num_queries_constant(api_client, superuser, get_auth_header):
+def test_users_list_num_queries_constant(api_client, superuser, get_auth_header, django_assert_num_queries):
     """
     Verify GET /api/users/ executes the exact same constant number of SQL queries
     regardless of whether there are 2 or 10 user records (O(1) query count, no N+1).
@@ -89,19 +108,13 @@ def test_users_list_num_queries_constant(api_client, superuser, get_auth_header)
     for i in range(3, 11):
         User.objects.create_user(username=f"query_user_{i}", email=f"query{i}@dicoevent.com", password="password123")
 
-    with CaptureQueriesContext(connection) as ctx_10:
+    with django_assert_num_queries(queries_2):
         res_10 = api_client.get("/api/users/", **headers)
     assert res_10.status_code == status.HTTP_200_OK
-    queries_10 = len(ctx_10.captured_queries)
-
-    assert queries_2 == queries_10, (
-        f"N+1 query regression on GET /api/users/: 2 users executed {queries_2} queries, "
-        f"but 10 users executed {queries_10} queries!"
-    )
 
 
 @pytest.mark.django_db
-def test_events_list_num_queries_constant(api_client, organizer_user):
+def test_events_list_num_queries_constant(api_client, organizer_user, django_assert_num_queries):
     """
     Verify GET /api/events/ executes constant number of SQL queries for 2 vs 10 events
     when cache is cleared prior to each request (O(1) query count, no N+1).
@@ -143,19 +156,13 @@ def test_events_list_num_queries_constant(api_client, organizer_user):
         )
 
     cache.clear()
-    with CaptureQueriesContext(connection) as ctx_10:
+    with django_assert_num_queries(queries_2):
         res_10 = api_client.get("/api/events/")
     assert res_10.status_code == status.HTTP_200_OK
-    queries_10 = len(ctx_10.captured_queries)
-
-    assert queries_2 == queries_10, (
-        f"N+1 query regression on GET /api/events/: 2 events executed {queries_2} queries, "
-        f"but 10 events executed {queries_10} queries!"
-    )
 
 
 @pytest.mark.django_db
-def test_tickets_list_num_queries_constant(api_client, organizer_user):
+def test_tickets_list_num_queries_constant(api_client, organizer_user, django_assert_num_queries):
     """
     Verify GET /api/tickets/ executes constant number of SQL queries for 2 vs 10 tickets
     (O(1) query count, no N+1 on event or organizer).
@@ -200,19 +207,15 @@ def test_tickets_list_num_queries_constant(api_client, organizer_user):
             quota=50,
         )
 
-    with CaptureQueriesContext(connection) as ctx_10:
+    with django_assert_num_queries(queries_2):
         res_10 = api_client.get("/api/tickets/")
     assert res_10.status_code == status.HTTP_200_OK
-    queries_10 = len(ctx_10.captured_queries)
-
-    assert queries_2 == queries_10, (
-        f"N+1 query regression on GET /api/tickets/: 2 tickets executed {queries_2} queries, "
-        f"but 10 tickets executed {queries_10} queries!"
-    )
 
 
 @pytest.mark.django_db
-def test_registrations_list_num_queries_constant(api_client, superuser, organizer_user, get_auth_header):
+def test_registrations_list_num_queries_constant(
+    api_client, superuser, organizer_user, get_auth_header, django_assert_num_queries
+):
     """
     Verify GET /api/registrations/ executes constant number of SQL queries for 2 vs 10 registrations
     (O(1) query count, no N+1 on ticket, event, or user).
@@ -257,19 +260,15 @@ def test_registrations_list_num_queries_constant(api_client, superuser, organize
     for i in range(2, 10):
         Registration.objects.create(ticket=ticket, user=users[i])
 
-    with CaptureQueriesContext(connection) as ctx_10:
+    with django_assert_num_queries(queries_2):
         res_10 = api_client.get("/api/registrations/", **headers)
     assert res_10.status_code == status.HTTP_200_OK
-    queries_10 = len(ctx_10.captured_queries)
-
-    assert queries_2 == queries_10, (
-        f"N+1 query regression on GET /api/registrations/: 2 registrations executed {queries_2} queries, "
-        f"but 10 registrations executed {queries_10} queries!"
-    )
 
 
 @pytest.mark.django_db
-def test_payments_list_num_queries_constant(api_client, superuser, organizer_user, get_auth_header):
+def test_payments_list_num_queries_constant(
+    api_client, superuser, organizer_user, get_auth_header, django_assert_num_queries
+):
     """
     Verify GET /api/payments/ executes constant number of SQL queries for 2 vs 10 payments
     (O(1) query count, no N+1 on registration or registrant user).
@@ -321,15 +320,9 @@ def test_payments_list_num_queries_constant(api_client, superuser, organizer_use
             registration=registrations[i], payment_method="E-Wallet", payment_status="Completed", amount_paid=50000
         )
 
-    with CaptureQueriesContext(connection) as ctx_10:
+    with django_assert_num_queries(queries_2):
         res_10 = api_client.get("/api/payments/", **headers)
     assert res_10.status_code == status.HTTP_200_OK
-    queries_10 = len(ctx_10.captured_queries)
-
-    assert queries_2 == queries_10, (
-        f"N+1 query regression on GET /api/payments/: 2 payments executed {queries_2} queries, "
-        f"but 10 payments executed {queries_10} queries!"
-    )
 
 
 # ==========================================
@@ -497,9 +490,31 @@ def test_django_silk_installed_and_configured():
 @pytest.mark.django_db
 def test_django_silk_route_accessible(api_client, superuser, get_auth_header):
     """
-    Verify /silk/ URL route is registered in dicoevent.urls and responds with 200 OK.
+    Verify /silk/ URL route is conditionally enabled: returns 404 when ENABLE_SILK is False,
+    and returns 200 OK when ENABLE_SILK is True.
     """
+    import importlib
+
+    from django.test import override_settings
+    from django.urls import clear_url_caches
+
+    import dicoevent.urls
+
     headers = get_auth_header(superuser)
-    # Even when ENABLE_SILK is False in tests, the route is registered and view renders 200 OK
-    response = api_client.get("/silk/", **headers)
-    assert response.status_code == status.HTTP_200_OK, f"Expected /silk/ to return 200 OK, got {response.status_code}"
+
+    # 1. By default in tests, ENABLE_SILK is False -> /silk/ route is not registered (404)
+    response_disabled = api_client.get("/silk/", **headers)
+    assert response_disabled.status_code == status.HTTP_404_NOT_FOUND
+
+    # 2. When ENABLE_SILK is True, reload urls and clear cache -> /silk/ route is accessible (200 OK)
+    with override_settings(ENABLE_SILK=True):
+        importlib.reload(dicoevent.urls)
+        clear_url_caches()
+        try:
+            response = api_client.get("/silk/", **headers)
+            assert response.status_code == status.HTTP_200_OK, (
+                f"Expected /silk/ to return 200 OK, got {response.status_code}"
+            )
+        finally:
+            importlib.reload(dicoevent.urls)
+            clear_url_caches()

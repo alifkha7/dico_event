@@ -415,7 +415,7 @@ class EventPosterUploadView(APIView):
     @extend_schema(
         request=EventPosterUploadSerializer,
         responses={status.HTTP_201_CREATED: EventPosterSerializer},
-        description="Upload an event poster image (JPEG, PNG, WEBP, GIF, max 5MB).",
+        description="Upload an Event Poster image (image/* MIME type, max 500 KB).",
     )
     def post(self, request, *args, **kwargs):
         serializer = EventPosterUploadSerializer(data=request.data, context={"request": request})

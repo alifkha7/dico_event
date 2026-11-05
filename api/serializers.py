@@ -19,6 +19,7 @@ def _resolve_foreign_key(
     default_fn=None,
     required_on_create=True,
     label=None,
+    select_related=None,
 ):
     """
     Resolve a foreign key from initial_data or attrs into a model instance.
@@ -41,10 +42,8 @@ def _resolve_foreign_key(
             attrs[field_name] = raw_val
         else:
             try:
-                if model_class is Ticket:
-                    attrs[field_name] = Ticket.objects.select_related("event").get(id=raw_val)
-                else:
-                    attrs[field_name] = model_class.objects.get(id=raw_val)
+                qs = model_class.objects.select_related(*select_related) if select_related else model_class.objects
+                attrs[field_name] = qs.get(id=raw_val)
             except Exception:
                 raise serializers.ValidationError({primary_id_key: f"{model_class.__name__} not found."})
     elif instance is None and required_on_create:
@@ -270,6 +269,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
             id_keys=["ticket_id", "ticket"],
             model_class=Ticket,
             required_on_create=True,
+            select_related=("event",),
         )
 
         _resolve_foreign_key(

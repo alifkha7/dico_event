@@ -1,6 +1,6 @@
 # DicoEvent DevEx, Query Optimization, OpenAPI Docs, Containerization & CI/CD Specification (V3)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Problem Statement
 

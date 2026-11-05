@@ -1,20 +1,41 @@
 from rest_framework import permissions
 
 
+def _get_user_group_names_lower(user):
+    """
+    Return a set of lowercase group names for the user, cached on the user instance.
+    Checks user._prefetched_objects_cache if groups were prefetched, avoiding extra queries.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return set()
+    cached = getattr(user, "_cached_group_names_lower", None)
+    if cached is not None:
+        return cached
+
+    prefetched_cache = getattr(user, "_prefetched_objects_cache", {})
+    if "groups" in prefetched_cache:
+        names = {g.name.lower() for g in prefetched_cache["groups"]}
+    else:
+        names = {name.lower() for name in user.groups.values_list("name", flat=True)}
+
+    user._cached_group_names_lower = names
+    return names
+
+
 def is_admin_user(user):
     """Check if user is a Superuser or member of an 'admin' group (case-insensitive)."""
-    if not user or not user.is_authenticated:
+    if not user or not getattr(user, "is_authenticated", False):
         return False
-    if user.is_superuser:
+    if getattr(user, "is_superuser", False):
         return True
-    return user.groups.filter(name__iexact="admin").exists()
+    return "admin" in _get_user_group_names_lower(user)
 
 
 def is_organizer_user(user):
     """Check if user is a member of an 'organizer' group (case-insensitive)."""
-    if not user or not user.is_authenticated:
+    if not user or not getattr(user, "is_authenticated", False):
         return False
-    return user.groups.filter(name__iexact="organizer").exists()
+    return "organizer" in _get_user_group_names_lower(user)
 
 
 def can_create_or_manage_events(user):
