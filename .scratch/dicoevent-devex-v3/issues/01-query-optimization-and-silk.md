@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `Event` model defines database indexes on `start_time`, `status`, and `category` with a corresponding schema migration.
 - [ ] `User`, `Event`, `Ticket`, `Registration`, and `Payment` querysets and foreign-key lookups use `select_related` and `prefetch_related` so that listing multiple records or checking object-level RBAC ownership (`Ticket -> Event`, `Payment -> Registration`, `Registration -> Ticket -> Event`) never triggers N+1 queries.
