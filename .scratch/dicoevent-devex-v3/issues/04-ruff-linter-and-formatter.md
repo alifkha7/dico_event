@@ -4,7 +4,7 @@
 
 **Blocked by:** 03: Full-Stack Docker Containerization (Dockerfile, Gunicorn, WhiteNoise & Compose)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `ruff` is added to project dependencies and configured in `pyproject.toml` with `target-version = "py312"`, `line-length = 120`, rule selectors `["E", "F", "I", "W"]`, and exclusions for auto-generated migrations and scratch/cache directories.
 - [ ] All Python source and test files across the repository are formatted and cleaned so `ruff check .` and `ruff format --check .` exit with code `0`.
