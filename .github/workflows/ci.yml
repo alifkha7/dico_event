@@ -1,0 +1,83 @@
+name: DicoEvent CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+      - master
+      - 'feat/**'
+
+jobs:
+  test:
+    name: Lint & Test Suite (PostgreSQL & Redis)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: dicoevent
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_NAME: dicoevent
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_HOST: localhost
+      DATABASE_PORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      USE_SQLITE_TEST: "False"
+      DEBUG: "False"
+      SECRET_KEY: django-insecure-ci-test-key-for-github-actions
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ruff Lint Check
+        run: ruff check .
+
+      - name: Ruff Format Check
+        run: ruff format --check .
+
+      - name: Apply Database Migrations
+        run: python manage.py migrate
+
+      - name: Run Pytest Suite
+        run: pytest
