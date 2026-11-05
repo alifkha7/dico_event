@@ -1,9 +1,11 @@
 from datetime import timedelta
+
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 from loguru import logger
+
 from api.models import Registration
 
 
@@ -17,7 +19,7 @@ def send_event_reminder_email(registration_id: str):
         return
 
     try:
-        registration = Registration.objects.select_related('ticket__event', 'user').get(id=registration_id)
+        registration = Registration.objects.select_related("ticket__event", "user").get(id=registration_id)
     except Registration.DoesNotExist:
         logger.error(f"Cannot send reminder email: Registration {registration_id} not found.")
         return
@@ -42,7 +44,7 @@ def send_event_reminder_email(registration_id: str):
         f"- Start Time: {start_time}\n\n"
         f"We look forward to seeing you there!\n"
     )
-    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@dicoevent.com')
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@dicoevent.com")
 
     try:
         send_mail(
@@ -83,15 +85,9 @@ def schedule_event_reminder(registration):
     try:
         if eta > now:
             send_event_reminder_email.apply_async(args=[reg_id_str], eta=eta)
-            logger.info(
-                f"Event reminder scheduled for {eta} (Registration ID: {reg_id_str}, Event: '{event.name}')"
-            )
+            logger.info(f"Event reminder scheduled for {eta} (Registration ID: {reg_id_str}, Event: '{event.name}')")
         else:
             send_event_reminder_email.delay(reg_id_str)
-            logger.info(
-                f"Event reminder dispatched immediately (Registration ID: {reg_id_str}, Event: '{event.name}')"
-            )
+            logger.info(f"Event reminder dispatched immediately (Registration ID: {reg_id_str}, Event: '{event.name}')")
     except Exception as e:
-        logger.error(
-            f"Broker connection error scheduling event reminder for registration {reg_id_str}: {e}"
-        )
+        logger.error(f"Broker connection error scheduling event reminder for registration {reg_id_str}: {e}")

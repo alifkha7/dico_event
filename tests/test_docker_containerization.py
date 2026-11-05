@@ -20,9 +20,7 @@ def test_dependencies_contain_gunicorn_whitenoise_and_pyyaml():
         assert dep in requirements_content, f"'{dep}' must be in requirements.txt"
 
     assert "pyyaml" in pipfile_content, "'pyyaml' must be listed in Pipfile"
-    assert "pyyaml" in requirements_content, (
-        "'pyyaml' must be listed in requirements.txt"
-    )
+    assert "pyyaml" in requirements_content, "'pyyaml' must be listed in requirements.txt"
 
 
 def test_whitenoise_and_static_root_configured():
@@ -38,12 +36,8 @@ def test_whitenoise_and_static_root_configured():
     security_middleware = "django.middleware.security.SecurityMiddleware"
     whitenoise_middleware = "whitenoise.middleware.WhiteNoiseMiddleware"
 
-    assert security_middleware in middleware, (
-        f"{security_middleware} must be in MIDDLEWARE"
-    )
-    assert whitenoise_middleware in middleware, (
-        f"{whitenoise_middleware} must be in MIDDLEWARE"
-    )
+    assert security_middleware in middleware, f"{security_middleware} must be in MIDDLEWARE"
+    assert whitenoise_middleware in middleware, f"{whitenoise_middleware} must be in MIDDLEWARE"
 
     security_index = middleware.index(security_middleware)
     whitenoise_index = middleware.index(whitenoise_middleware)
@@ -58,17 +52,11 @@ def test_dockerfile_configuration():
     assert dockerfile_path.exists(), "Dockerfile must exist at repository root"
 
     content = dockerfile_path.read_text(encoding="utf-8")
-    assert "FROM python:3.12-slim" in content, (
-        "Dockerfile must use python:3.12-slim base image"
-    )
+    assert "FROM python:3.12-slim" in content, "Dockerfile must use python:3.12-slim base image"
     assert "requirements.txt" in content, "Dockerfile must install requirements.txt"
-    assert "collectstatic --noinput" in content, (
-        "Dockerfile must run collectstatic --noinput"
-    )
+    assert "collectstatic --noinput" in content, "Dockerfile must run collectstatic --noinput"
     assert "migrate" in content, "Dockerfile entrypoint / CMD must run migrations"
-    assert "gunicorn dicoevent.wsgi:application" in content, (
-        "Dockerfile must run gunicorn dicoevent.wsgi:application"
-    )
+    assert "gunicorn dicoevent.wsgi:application" in content, "Dockerfile must run gunicorn dicoevent.wsgi:application"
 
 
 def test_dockerignore_configuration():
@@ -79,9 +67,7 @@ def test_dockerignore_configuration():
     content = dockerignore_path.read_text(encoding="utf-8")
     patterns = [".git", ".pytest_cache", ".scratch", "__pycache__", "*.log", ".env"]
     for pattern in patterns:
-        assert pattern in content, (
-            f"Pattern '{pattern}' must be excluded in .dockerignore"
-        )
+        assert pattern in content, f"Pattern '{pattern}' must be excluded in .dockerignore"
 
 
 def test_docker_compose_services_and_dependencies():
@@ -98,9 +84,7 @@ def test_docker_compose_services_and_dependencies():
         assert s in services, f"Service '{s}' must be defined in docker-compose.yml"
 
     # Healthchecks on postgres and redis
-    assert "healthcheck" in services["postgres"], (
-        "postgres service must define a healthcheck"
-    )
+    assert "healthcheck" in services["postgres"], "postgres service must define a healthcheck"
     assert "healthcheck" in services["redis"], "redis service must define a healthcheck"
 
     # Helper to parse env vars whether list or dict
@@ -131,9 +115,9 @@ def test_docker_compose_services_and_dependencies():
     # Verify 'web' service
     web = services["web"]
     build_context = web.get("build")
-    assert build_context == "." or (
-        isinstance(build_context, dict) and build_context.get("context") == "."
-    ), "web service build context must be '.'"
+    assert build_context == "." or (isinstance(build_context, dict) and build_context.get("context") == "."), (
+        "web service build context must be '.'"
+    )
     ports = [str(p) for p in web.get("ports", [])]
     assert any("8000:8000" in p for p in ports), "web service must map port 8000:8000"
 
@@ -146,9 +130,7 @@ def test_docker_compose_services_and_dependencies():
         "MAIL_HOST",
         "ENABLE_SILK",
     ]:
-        assert env_var in web_env, (
-            f"web service must define environment variable '{env_var}'"
-        )
+        assert env_var in web_env, f"web service must define environment variable '{env_var}'"
 
     web_deps = get_depends_on_list(web)
     for dep in ["postgres", "redis", "minio", "mailpit"]:
@@ -158,15 +140,12 @@ def test_docker_compose_services_and_dependencies():
     celery = services["celery"]
     build_context_celery = celery.get("build")
     assert build_context_celery == "." or (
-        isinstance(build_context_celery, dict)
-        and build_context_celery.get("context") == "."
+        isinstance(build_context_celery, dict) and build_context_celery.get("context") == "."
     ), "celery service build context must be '.'"
     cmd = celery.get("command", "")
     if isinstance(cmd, list):
         cmd = " ".join(cmd)
-    assert "celery" in cmd and "worker" in cmd, (
-        "celery service command must run celery worker"
-    )
+    assert "celery" in cmd and "worker" in cmd, "celery service command must run celery worker"
 
     celery_env = get_env_dict(celery)
     for env_var in [
@@ -176,9 +155,7 @@ def test_docker_compose_services_and_dependencies():
         "MINIO_ENDPOINT_URL",
         "MAIL_HOST",
     ]:
-        assert env_var in celery_env, (
-            f"celery service must define environment variable '{env_var}'"
-        )
+        assert env_var in celery_env, f"celery service must define environment variable '{env_var}'"
 
     celery_deps = get_depends_on_list(celery)
     for dep in ["postgres", "redis", "mailpit"]:

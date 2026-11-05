@@ -1,8 +1,10 @@
 import sys
 from pathlib import Path
+
 from loguru import logger
 
 _logging_initialized = False
+
 
 def setup_logging(base_dir=None):
     global _logging_initialized

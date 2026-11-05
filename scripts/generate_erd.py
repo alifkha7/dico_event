@@ -1,5 +1,7 @@
 import os
+
 from PIL import Image, ImageDraw, ImageFont
+
 
 def generate_erd():
     WIDTH = 2400
@@ -18,7 +20,9 @@ def generate_erd():
         font_legend = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 13)
         font_cardinality = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 12)
     except Exception:
-        font_title = font_subtitle = font_tbl_header = font_col = font_badge = font_legend = font_cardinality = ImageFont.load_default()
+        font_title = font_subtitle = font_tbl_header = font_col = font_badge = font_legend = font_cardinality = (
+            ImageFont.load_default()
+        )
 
     # Draw background subtle grid
     grid_color = "#131c31"
@@ -31,7 +35,15 @@ def generate_erd():
     draw.rounded_rectangle([(50, 30), (WIDTH - 50, 120)], radius=12, fill="#131d35", outline="#223354", width=2)
     draw.line([(50, 118), (WIDTH - 50, 118)], fill="#38bdf8", width=3)
     draw.text((80, 42), "DICOEVENT VERSI 1 — ENTITY RELATIONSHIP DIAGRAM (ERD)", fill="#ffffff", font=font_title)
-    draw.text((82, 85), "Normalized Relational PostgreSQL Database Schema • UUID Primary Keys • Foreign Key Cascades • RBAC Multi-Tenancy", fill="#94a3b8", font=font_subtitle)
+    draw.text(
+        (82, 85),
+        (
+            "Normalized Relational PostgreSQL Database Schema • UUID Primary Keys • "
+            "Foreign Key Cascades • RBAC Multi-Tenancy"
+        ),
+        fill="#94a3b8",
+        font=font_subtitle,
+    )
 
     # Table definitions
     # (name, header_color, x, y, width, columns: [(name, type, badge)])
@@ -47,7 +59,7 @@ def generate_erd():
             "cols": [
                 ("id", "INT", "PK"),
                 ("name", "VARCHAR(150)", "UQ"),
-            ]
+            ],
         },
         {
             "id": "users_groups",
@@ -61,7 +73,7 @@ def generate_erd():
                 ("id", "BIGINT", "PK"),
                 ("user_id", "UUID", "FK"),
                 ("group_id", "INT", "FK"),
-            ]
+            ],
         },
         {
             "id": "users",
@@ -82,7 +94,7 @@ def generate_erd():
                 ("is_staff", "BOOLEAN", ""),
                 ("is_active", "BOOLEAN", ""),
                 ("date_joined", "TIMESTAMP", ""),
-            ]
+            ],
         },
         {
             "id": "events",
@@ -103,7 +115,7 @@ def generate_erd():
                 ("quota", "INT", ""),
                 ("category", "VARCHAR(100)", ""),
                 ("organizer_id", "UUID", "FK"),
-            ]
+            ],
         },
         {
             "id": "event_posters",
@@ -117,7 +129,7 @@ def generate_erd():
                 ("id", "UUID", "PK"),
                 ("event_id", "UUID", "FK"),
                 ("image", "VARCHAR(255)", ""),
-            ]
+            ],
         },
         {
             "id": "tickets",
@@ -135,7 +147,7 @@ def generate_erd():
                 ("sales_start", "TIMESTAMP", ""),
                 ("sales_end", "TIMESTAMP", ""),
                 ("quota", "INT", ""),
-            ]
+            ],
         },
         {
             "id": "registrations",
@@ -149,7 +161,7 @@ def generate_erd():
                 ("id", "UUID", "PK"),
                 ("ticket_id", "UUID", "FK"),
                 ("user_id", "UUID", "FK"),
-            ]
+            ],
         },
         {
             "id": "payments",
@@ -165,7 +177,7 @@ def generate_erd():
                 ("payment_method", "VARCHAR(100)", ""),
                 ("payment_status", "VARCHAR(100)", ""),
                 ("amount_paid", "INT", ""),
-            ]
+            ],
         },
     ]
 
@@ -219,12 +231,16 @@ def generate_erd():
             # Badge or space
             if badge:
                 draw_badge(x + 12, curr_y + 4, badge, badge)
-            
+
             # Column name
             draw.text((x + 46, curr_y + 5), col_name, fill="#f8fafc", font=font_col)
 
             # Column type
-            type_fill = "#38bdf8" if "UUID" in col_type else ("#34d399" if "INT" in col_type else ("#fbbf24" if "TIMESTAMP" in col_type else "#cbd5e1"))
+            type_fill = (
+                "#38bdf8"
+                if "UUID" in col_type
+                else ("#34d399" if "INT" in col_type else ("#fbbf24" if "TIMESTAMP" in col_type else "#cbd5e1"))
+            )
             draw.text((x + w - 140, curr_y + 5), col_type, fill=type_fill, font=font_col)
 
             curr_y += ROW_H
@@ -234,19 +250,33 @@ def generate_erd():
         line_color = "#38bdf8"
         for i in range(len(points) - 1):
             draw.line([points[i], points[i + 1]], fill=line_color, width=2)
-        
+
         # Endpoint dots
-        draw.ellipse([(points[0][0] - 4, points[0][1] - 4), (points[0][0] + 4, points[0][1] + 4)], fill="#fbbf24", outline="#ffffff", width=1)
-        draw.ellipse([(points[-1][0] - 5, points[-1][1] - 5), (points[-1][0] + 5, points[-1][1] + 5)], fill="#38bdf8", outline="#ffffff", width=1)
+        draw.ellipse(
+            [(points[0][0] - 4, points[0][1] - 4), (points[0][0] + 4, points[0][1] + 4)],
+            fill="#fbbf24",
+            outline="#ffffff",
+            width=1,
+        )
+        draw.ellipse(
+            [(points[-1][0] - 5, points[-1][1] - 5), (points[-1][0] + 5, points[-1][1] + 5)],
+            fill="#38bdf8",
+            outline="#ffffff",
+            width=1,
+        )
 
         # Start label pill
         sx, sy = points[0]
-        draw.rounded_rectangle([(sx - 10, sy - 22), (sx + 10, sy - 4)], radius=4, fill="#1e293b", outline="#fbbf24", width=1)
+        draw.rounded_rectangle(
+            [(sx - 10, sy - 22), (sx + 10, sy - 4)], radius=4, fill="#1e293b", outline="#fbbf24", width=1
+        )
         draw.text((sx - 4, sy - 20), label_start, fill="#fbbf24", font=font_cardinality)
 
         # End label pill
         ex, ey = points[-1]
-        draw.rounded_rectangle([(ex - 10, ey - 22), (ex + 10, ey - 4)], radius=4, fill="#1e293b", outline="#38bdf8", width=1)
+        draw.rounded_rectangle(
+            [(ex - 10, ey - 22), (ex + 10, ey - 4)], radius=4, fill="#1e293b", outline="#38bdf8", width=1
+        )
         draw.text((ex - 5, ey - 20), label_end, fill="#38bdf8", font=font_cardinality)
 
         # Midpoint note
@@ -255,7 +285,9 @@ def generate_erd():
         my = (points[mid_idx - 1][1] + points[mid_idx][1]) // 2
         if note:
             nw = len(note) * 7 + 10
-            draw.rounded_rectangle([(mx - nw // 2, my - 10), (mx + nw // 2, my + 10)], radius=4, fill="#0f172a", outline="#475569", width=1)
+            draw.rounded_rectangle(
+                [(mx - nw // 2, my - 10), (mx + nw // 2, my + 10)], radius=4, fill="#0f172a", outline="#475569", width=1
+            )
             draw.text((mx - nw // 2 + 5, my - 7), note, fill="#94a3b8", font=font_badge)
 
     # Relationship Lines:
@@ -263,7 +295,9 @@ def generate_erd():
     draw_relation([(480, 210), (560, 210)], label_start="1", label_end="N", note="FK group_id")
 
     # 2. users -> users_groups (1:N)
-    draw_relation([(280, 380), (280, 320), (520, 320), (520, 235), (560, 235)], label_start="1", label_end="N", note="FK user_id")
+    draw_relation(
+        [(280, 380), (280, 320), (520, 320), (520, 235), (560, 235)], label_start="1", label_end="N", note="FK user_id"
+    )
 
     # 3. users -> events (1:N organizer)
     draw_relation([(480, 520), (560, 520)], label_start="1", label_end="N", note="CASCADE organizer_id")
@@ -281,16 +315,12 @@ def generate_erd():
     draw_relation([(1840, 530), (1840, 660)], label_start="1", label_end="N", note="CASCADE registration_id")
 
     # 8. users -> registrations (1:N attendee)
-    draw_relation([
-        (480, 680),
-        (520, 680),
-        (520, 820),
-        (1060, 820),
-        (1060, 340),
-        (1580, 340),
-        (1580, 440),
-        (1620, 440)
-    ], label_start="1", label_end="N", note="CASCADE user_id")
+    draw_relation(
+        [(480, 680), (520, 680), (520, 820), (1060, 820), (1060, 340), (1580, 340), (1580, 440), (1620, 440)],
+        label_start="1",
+        label_end="N",
+        note="CASCADE user_id",
+    )
 
     # Bottom Legend Panel
     draw.rounded_rectangle([(50, 1260), (WIDTH - 50, 1350)], radius=10, fill="#131d35", outline="#223354", width=2)
@@ -310,7 +340,9 @@ def generate_erd():
     draw.ellipse([(1216, 1286), (1224, 1294)], fill="#38bdf8")
     draw.text((1235, 1280), "1 : N One-to-Many Relationship (with ON DELETE CASCADE)", fill="#cbd5e1", font=font_legend)
 
-    draw.text((1820, 1280), "ADR-0001: Ticket Deletion Cascades to Registrations & Payments", fill="#38bdf8", font=font_legend)
+    draw.text(
+        (1820, 1280), "ADR-0001: Ticket Deletion Cascades to Registrations & Payments", fill="#38bdf8", font=font_legend
+    )
 
     # Save PNG and JPG
     worktree_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -321,6 +353,7 @@ def generate_erd():
     img.convert("RGB").save(jpg_path, "JPEG", quality=95)
     print(f"Generated: {png_path} ({os.path.getsize(png_path)} bytes)")
     print(f"Generated: {jpg_path} ({os.path.getsize(jpg_path)} bytes)")
+
 
 if __name__ == "__main__":
     generate_erd()

@@ -1,0 +1,19 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = [
+    "migrations",
+    ".scratch",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "W",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"dicoevent/settings.py" = ["E402"]
