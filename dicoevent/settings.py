@@ -1,4 +1,6 @@
 import os
+import sys
+
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -13,6 +15,10 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dicoevent-default-sec
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
+# Test detection and Silk profiling flag
+RUNNING_TESTS = any('pytest' in arg for arg in sys.argv) or 'test' in sys.argv or 'pytest' in sys.modules
+ENABLE_SILK = os.environ.get('ENABLE_SILK', 'False' if RUNNING_TESTS else 'True').lower() in ('true', '1', 'yes')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -25,6 +31,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'django_filters',
+    'silk',
     # Local apps
     'api.apps.ApiConfig',
 ]
@@ -38,6 +45,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if ENABLE_SILK:
+    MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
 
 ROOT_URLCONF = 'dicoevent.urls'
 
@@ -59,7 +69,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'dicoevent.wsgi.application'
 
-import sys
+
 
 # PostgreSQL Database Settings
 # Strictly read from DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST, DATABASE_PORT

@@ -16,6 +16,7 @@ loguru = ">=0.7.0"
 django-filter = ">=23.5"
 pillow = ">=10.0.0"
 python-dotenv = ">=1.0.0"
+django-silk = ">=5.1.0"
 
 [dev-packages]
 pytest = ">=8.0.0"

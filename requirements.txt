@@ -10,5 +10,6 @@ loguru>=0.7.0
 django-filter>=23.5
 pillow>=10.0.0
 python-dotenv>=1.0.0
+django-silk>=5.1.0
 pytest>=8.0.0
 pytest-django>=4.8.0

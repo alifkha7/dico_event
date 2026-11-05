@@ -40,7 +40,10 @@ def _resolve_foreign_key(
             attrs[field_name] = raw_val
         else:
             try:
-                attrs[field_name] = model_class.objects.get(id=raw_val)
+                if model_class is Ticket:
+                    attrs[field_name] = Ticket.objects.select_related('event').get(id=raw_val)
+                else:
+                    attrs[field_name] = model_class.objects.get(id=raw_val)
             except Exception:
                 raise serializers.ValidationError({primary_id_key: f"{model_class.__name__} not found."})
     elif instance is None and required_on_create:

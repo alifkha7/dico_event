@@ -76,7 +76,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 
 
 class UserViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = User.objects.all().order_by('date_joined')
+    queryset = User.objects.prefetch_related('groups').all().order_by('date_joined')
     serializer_class = UserSerializer
     permission_classes = [UserViewSetPermission]
 
@@ -189,7 +189,7 @@ class EventFilter(django_filters.FilterSet):
 
 
 class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Event.objects.all().order_by('start_time', 'id')
+    queryset = Event.objects.select_related('organizer').all().order_by('start_time', 'id')
     serializer_class = EventSerializer
     permission_classes = [EventViewSetPermission]
     pagination_class = EventPagination
@@ -271,7 +271,7 @@ class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
 
 class TicketViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Ticket.objects.all().order_by('id')
+    queryset = Ticket.objects.select_related('event', 'event__organizer').all().order_by('id')
     serializer_class = TicketSerializer
     permission_classes = [TicketViewSetPermission]
 
@@ -308,7 +308,7 @@ class TicketViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
 
 class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Registration.objects.all().order_by('id')
+    queryset = Registration.objects.select_related('ticket', 'ticket__event', 'user').all().order_by('id')
     serializer_class = RegistrationSerializer
     permission_classes = [RegistrationViewSetPermission]
 
@@ -352,7 +352,7 @@ class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
 
 class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Payment.objects.all().order_by('id')
+    queryset = Payment.objects.select_related('registration', 'registration__user').all().order_by('id')
     serializer_class = PaymentSerializer
     permission_classes = [PaymentViewSetPermission]
 

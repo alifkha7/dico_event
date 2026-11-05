@@ -31,6 +31,11 @@ class Event(models.Model):
         db_table = 'events'
         verbose_name = 'Event'
         verbose_name_plural = 'Events'
+        indexes = [
+            models.Index(fields=['start_time']),
+            models.Index(fields=['status']),
+            models.Index(fields=['category']),
+        ]
 
     def __str__(self):
         return self.name
