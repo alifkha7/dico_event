@@ -4,7 +4,7 @@
 
 **Blocked by:** 04: Unified Linting & Formatting with Ruff (pyproject.toml)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] A GitHub Actions workflow is defined for `push` and `pull_request` events with health-checked `postgres:15-alpine` and `redis:7-alpine` service containers.
 - [ ] The workflow installs project dependencies on Python 3.12, runs `ruff check .` and `ruff format --check .`, runs `python manage.py migrate`, and executes `pytest` with `USE_SQLITE_TEST=False` against the PostgreSQL and Redis service containers.
