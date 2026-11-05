@@ -1,6 +1,6 @@
 import django_filters
 from django.core.exceptions import ValidationError
-from rest_framework import viewsets, status, filters, permissions
+from rest_framework import viewsets, status, filters, permissions, serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -9,6 +9,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from drf_spectacular.utils import extend_schema, inline_serializer
 from loguru import logger
 
 from .models import Event, Ticket, Registration, Payment, EventPoster
@@ -137,7 +138,22 @@ class GroupViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
 class AssignRoleView(APIView):
     permission_classes = [IsSuperuser]
+    serializer_class = AssignRoleSerializer
 
+    @extend_schema(
+        request=AssignRoleSerializer,
+        responses={
+            status.HTTP_201_CREATED: inline_serializer(
+                name='AssignRoleResponse',
+                fields={
+                    'message': serializers.CharField(),
+                    'user_id': serializers.CharField(),
+                    'group_id': serializers.IntegerField(),
+                }
+            )
+        },
+        description="Assign a role group to a user."
+    )
     def post(self, request, *args, **kwargs):
         serializer = AssignRoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -390,7 +406,13 @@ class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 class EventPosterUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
     permission_classes = [CanUploadPosterPermission]
+    serializer_class = EventPosterUploadSerializer
 
+    @extend_schema(
+        request=EventPosterUploadSerializer,
+        responses={status.HTTP_201_CREATED: EventPosterSerializer},
+        description="Upload an event poster image (JPEG, PNG, WEBP, GIF, max 5MB)."
+    )
     def post(self, request, *args, **kwargs):
         serializer = EventPosterUploadSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
@@ -443,7 +465,12 @@ class EventPosterUploadView(APIView):
 
 class EventPostersListView(APIView):
     permission_classes = [permissions.AllowAny]
+    serializer_class = EventPosterSerializer
 
+    @extend_schema(
+        responses={status.HTTP_200_OK: EventPosterSerializer(many=True)},
+        description="List all posters for a specific event."
+    )
     def get(self, request, event_id, *args, **kwargs):
         try:
             event = Event.objects.get(id=event_id)

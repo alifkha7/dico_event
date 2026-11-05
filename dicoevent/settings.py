@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'django_filters',
     'silk',
+    'drf_spectacular',
     # Local apps
     'api.apps.ApiConfig',
 ]
@@ -134,12 +135,23 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
+}
+
+# drf-spectacular OpenAPI Settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'DicoEvent API',
+    'DESCRIPTION': 'RESTful API for the DicoEvent Event Management and Ticketing Platform.',
+    'VERSION': '2.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'COMPONENT_SPLIT_REQUEST': True,
 }
 
 # SimpleJWT configuration (3-hour access token)

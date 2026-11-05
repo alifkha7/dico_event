@@ -1,4 +1,10 @@
 from django.urls import re_path
+from rest_framework.permissions import AllowAny
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+    SpectacularRedocView,
+)
 from .views import (
     CustomTokenObtainPairView,
     CustomTokenRefreshView,
@@ -14,6 +20,9 @@ from .views import (
 )
 
 urlpatterns = [
+    re_path(r'^schema/?$', SpectacularAPIView.as_view(permission_classes=[AllowAny]), name='schema'),
+    re_path(r'^docs/?$', SpectacularSwaggerView.as_view(url_name='schema', permission_classes=[AllowAny]), name='swagger-ui'),
+    re_path(r'^redoc/?$', SpectacularRedocView.as_view(url_name='schema', permission_classes=[AllowAny]), name='redoc'),
     re_path(r'^login/?$', CustomTokenObtainPairView.as_view(), name='login'),
     re_path(r'^token/?$', CustomTokenRefreshView.as_view(), name='token_refresh'),
     re_path(
