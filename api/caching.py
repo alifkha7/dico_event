@@ -1,8 +1,9 @@
 from urllib.parse import parse_qsl, urlencode
+
 from django.conf import settings
 from django.core.cache import cache
 
-CACHE_TTL = getattr(settings, 'CACHE_TTL', 3600)
+CACHE_TTL = getattr(settings, "CACHE_TTL", 3600)
 EVENT_DETAIL_KEY_PREFIX = "events:detail:"
 EVENT_LIST_KEY_PREFIX = "events:list:"
 EVENT_LIST_REGISTRY_KEY = "events:list:registry"
@@ -75,7 +76,7 @@ def invalidate_event_list_cache():
         cache.delete(EVENT_LIST_REGISTRY_KEY)
 
     # Invalidate by pattern if backed by django-redis
-    if hasattr(cache, 'delete_pattern'):
+    if hasattr(cache, "delete_pattern"):
         try:
             cache.delete_pattern(f"{EVENT_LIST_KEY_PREFIX}*")
         except Exception:

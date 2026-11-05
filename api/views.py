@@ -1,63 +1,62 @@
 import django_filters
-from django.core.exceptions import ValidationError
-from rest_framework import viewsets, status, filters, permissions, serializers
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.pagination import PageNumberPagination
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, inline_serializer
 from loguru import logger
+from rest_framework import filters, permissions, serializers, status, viewsets
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import Event, Ticket, Registration, Payment, EventPoster
-from .serializers import (
-    UserSerializer,
-    GroupSerializer,
-    AssignRoleSerializer,
-    EventSerializer,
-    TicketSerializer,
-    RegistrationSerializer,
-    PaymentSerializer,
-    EventPosterSerializer,
-    EventPosterUploadSerializer,
-)
-from .permissions import (
-    is_admin_user,
-    IsSuperuser,
-    UserViewSetPermission,
-    EventViewSetPermission,
-    TicketViewSetPermission,
-    RegistrationViewSetPermission,
-    PaymentViewSetPermission,
-    CanUploadPosterPermission,
-)
+from . import storage
 from .caching import (
     get_cached_event_detail,
-    set_cached_event_detail,
     get_cached_event_list,
-    set_cached_event_list,
-    invalidate_event_list_cache,
-    invalidate_all_event_caches,
     invalidate_event_caches,
+    set_cached_event_detail,
+    set_cached_event_list,
 )
-from . import storage
+from .models import Event, EventPoster, Payment, Registration, Ticket
+from .permissions import (
+    CanUploadPosterPermission,
+    EventViewSetPermission,
+    IsSuperuser,
+    PaymentViewSetPermission,
+    RegistrationViewSetPermission,
+    TicketViewSetPermission,
+    UserViewSetPermission,
+    is_admin_user,
+)
+from .serializers import (
+    AssignRoleSerializer,
+    EventPosterSerializer,
+    EventPosterUploadSerializer,
+    EventSerializer,
+    GroupSerializer,
+    PaymentSerializer,
+    RegistrationSerializer,
+    TicketSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
 
 class PartialUpdateMixin:
     """Mixin for ModelViewSets that defaults PUT updates to partial=True per ADR-0001 / spec."""
+
     def update(self, request, *args, **kwargs):
-        kwargs['partial'] = kwargs.pop('partial', True)
+        kwargs["partial"] = kwargs.pop("partial", True)
         return super().update(request, *args, **kwargs)
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
-        username = request.data.get('username')
+        username = request.data.get("username")
         response = super().post(request, *args, **kwargs)
         if response.status_code == status.HTTP_200_OK:
             logger.info(f"User '{username}' logged in successfully.")
@@ -77,7 +76,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 
 
 class UserViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = User.objects.prefetch_related('groups').all().order_by('date_joined')
+    queryset = User.objects.prefetch_related("groups").all().order_by("date_joined")
     serializer_class = UserSerializer
     permission_classes = [UserViewSetPermission]
 
@@ -107,7 +106,7 @@ class UserViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
 
 class GroupViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Group.objects.all().order_by('id')
+    queryset = Group.objects.all().order_by("id")
     serializer_class = GroupSerializer
     permission_classes = [IsSuperuser]
 
@@ -144,21 +143,21 @@ class AssignRoleView(APIView):
         request=AssignRoleSerializer,
         responses={
             status.HTTP_201_CREATED: inline_serializer(
-                name='AssignRoleResponse',
+                name="AssignRoleResponse",
                 fields={
-                    'message': serializers.CharField(),
-                    'user_id': serializers.CharField(),
-                    'group_id': serializers.IntegerField(),
-                }
+                    "message": serializers.CharField(),
+                    "user_id": serializers.CharField(),
+                    "group_id": serializers.IntegerField(),
+                },
             )
         },
-        description="Assign a role group to a user."
+        description="Assign a role group to a user.",
     )
     def post(self, request, *args, **kwargs):
         serializer = AssignRoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user_id']
-        group = serializer.validated_data['group_id']
+        user = serializer.validated_data["user_id"]
+        group = serializer.validated_data["group_id"]
 
         user.groups.add(group)
         logger.info(f"Role '{group.name}' (ID: {group.id}) assigned to user '{user.username}' (ID: {user.id})")
@@ -166,62 +165,64 @@ class AssignRoleView(APIView):
             {
                 "message": f"Role '{group.name}' assigned to user '{user.username}' successfully.",
                 "user_id": str(user.id),
-                "group_id": group.id
+                "group_id": group.id,
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
 
 
 class EventPagination(PageNumberPagination):
     page_size = 10
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 100
 
     def paginate_queryset(self, queryset, request, view=None):
-        if 'page' not in request.query_params and 'page_size' not in request.query_params:
+        if "page" not in request.query_params and "page_size" not in request.query_params:
             return None
         return super().paginate_queryset(queryset, request, view=view)
 
     def get_paginated_response(self, data):
-        return Response({
-            'count': self.page.paginator.count,
-            'next': self.get_next_link(),
-            'previous': self.get_previous_link(),
-            'events': data
-        })
+        return Response(
+            {
+                "count": self.page.paginator.count,
+                "next": self.get_next_link(),
+                "previous": self.get_previous_link(),
+                "events": data,
+            }
+        )
 
 
 class EventFilter(django_filters.FilterSet):
-    name = django_filters.CharFilter(field_name='name', lookup_expr='icontains')
-    category = django_filters.CharFilter(field_name='category', lookup_expr='iexact')
-    status = django_filters.CharFilter(field_name='status', lookup_expr='iexact')
-    location = django_filters.CharFilter(field_name='location', lookup_expr='icontains')
-    organizer = django_filters.UUIDFilter(field_name='organizer_id')
-    organizer_id = django_filters.UUIDFilter(field_name='organizer_id')
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+    category = django_filters.CharFilter(field_name="category", lookup_expr="iexact")
+    status = django_filters.CharFilter(field_name="status", lookup_expr="iexact")
+    location = django_filters.CharFilter(field_name="location", lookup_expr="icontains")
+    organizer = django_filters.UUIDFilter(field_name="organizer_id")
+    organizer_id = django_filters.UUIDFilter(field_name="organizer_id")
 
     class Meta:
         model = Event
-        fields = ['name', 'category', 'status', 'location', 'organizer', 'organizer_id']
+        fields = ["name", "category", "status", "location", "organizer", "organizer_id"]
 
 
 class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Event.objects.select_related('organizer').all().order_by('start_time', 'id')
+    queryset = Event.objects.select_related("organizer").all().order_by("start_time", "id")
     serializer_class = EventSerializer
     permission_classes = [EventViewSetPermission]
     pagination_class = EventPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = EventFilter
-    search_fields = ['name', 'description', 'location', 'category']
-    ordering_fields = ['name', 'start_time', 'end_time', 'quota', 'status', 'category', 'id']
-    ordering = ['start_time', 'id']
+    search_fields = ["name", "description", "location", "category"]
+    ordering_fields = ["name", "start_time", "end_time", "quota", "status", "category", "id"]
+    ordering = ["start_time", "id"]
 
     def list(self, request, *args, **kwargs):
-        query_string = request.META.get('QUERY_STRING', '')
+        query_string = request.META.get("QUERY_STRING", "")
         cached_data = get_cached_event_list(query_string)
         if cached_data is not None:
             logger.info(f"Serving events list from cache (query: '{query_string}').")
             response = Response(cached_data, status=status.HTTP_200_OK)
-            response['X-Data-Source'] = 'cache'
+            response["X-Data-Source"] = "cache"
             return response
 
         queryset = self.filter_queryset(self.get_queryset())
@@ -231,7 +232,7 @@ class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
             logger.info(f"Listing events from database (paginated): count={self.paginator.page.paginator.count}")
             paginated_response = self.get_paginated_response(serializer.data)
             set_cached_event_list(query_string, paginated_response.data)
-            paginated_response['X-Data-Source'] = 'database'
+            paginated_response["X-Data-Source"] = "database"
             return paginated_response
 
         serializer = self.get_serializer(queryset, many=True)
@@ -239,17 +240,17 @@ class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
         data = {"events": serializer.data}
         set_cached_event_list(query_string, data)
         response = Response(data, status=status.HTTP_200_OK)
-        response['X-Data-Source'] = 'database'
+        response["X-Data-Source"] = "database"
         return response
 
     def retrieve(self, request, *args, **kwargs):
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
-        pk = kwargs.get(lookup_url_kwarg, kwargs.get('pk'))
+        pk = kwargs.get(lookup_url_kwarg, kwargs.get("pk"))
         cached_data = get_cached_event_detail(pk)
         if cached_data is not None:
             logger.info(f"Serving event detail from cache (ID: {pk}).")
             response = Response(cached_data, status=status.HTTP_200_OK)
-            response['X-Data-Source'] = 'cache'
+            response["X-Data-Source"] = "cache"
             return response
 
         instance = self.get_object()
@@ -257,7 +258,7 @@ class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
         set_cached_event_detail(pk, serializer.data)
         logger.info(f"Retrieved event from database: '{instance.name}' (ID: {instance.id})")
         response = Response(serializer.data, status=status.HTTP_200_OK)
-        response['X-Data-Source'] = 'database'
+        response["X-Data-Source"] = "database"
         return response
 
     def create(self, request, *args, **kwargs):
@@ -265,14 +266,16 @@ class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         event = serializer.save()
         invalidate_event_caches(event.id)
-        username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
+        username = request.user.username if request.user and request.user.is_authenticated else "anonymous"
         logger.info(f"Event created successfully: '{event.name}' (ID: {event.id}) by user '{username}'")
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def perform_update(self, serializer):
         event = serializer.save()
         invalidate_event_caches(event.id)
-        username = self.request.user.username if self.request.user and self.request.user.is_authenticated else 'anonymous'
+        username = (
+            self.request.user.username if self.request.user and self.request.user.is_authenticated else "anonymous"
+        )
         logger.info(f"Event updated successfully: '{event.name}' (ID: {event.id}) by user '{username}'")
 
     def destroy(self, request, *args, **kwargs):
@@ -281,13 +284,13 @@ class EventViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
         event_name = instance.name
         self.perform_destroy(instance)
         invalidate_event_caches(event_id)
-        username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
+        username = request.user.username if request.user and request.user.is_authenticated else "anonymous"
         logger.info(f"Event deleted successfully: '{event_name}' (ID: {event_id}) by user '{username}'")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TicketViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Ticket.objects.select_related('event', 'event__organizer').all().order_by('id')
+    queryset = Ticket.objects.select_related("event", "event__organizer").all().order_by("id")
     serializer_class = TicketSerializer
     permission_classes = [TicketViewSetPermission]
 
@@ -324,7 +327,7 @@ class TicketViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
 
 class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Registration.objects.select_related('ticket', 'ticket__event', 'user').all().order_by('id')
+    queryset = Registration.objects.select_related("ticket", "ticket__event", "user").all().order_by("id")
     serializer_class = RegistrationSerializer
     permission_classes = [RegistrationViewSetPermission]
 
@@ -349,6 +352,7 @@ class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
         # Schedule reminder email
         try:
             from api.tasks import schedule_event_reminder
+
             schedule_event_reminder(registration)
         except Exception as e:
             logger.error(f"Failed to schedule event reminder for registration {registration.id}: {e}")
@@ -368,7 +372,7 @@ class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
 
 class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Payment.objects.select_related('registration', 'registration__user').all().order_by('id')
+    queryset = Payment.objects.select_related("registration", "registration__user").all().order_by("id")
     serializer_class = PaymentSerializer
     permission_classes = [PaymentViewSetPermission]
 
@@ -411,16 +415,16 @@ class EventPosterUploadView(APIView):
     @extend_schema(
         request=EventPosterUploadSerializer,
         responses={status.HTTP_201_CREATED: EventPosterSerializer},
-        description="Upload an event poster image (JPEG, PNG, WEBP, GIF, max 5MB)."
+        description="Upload an event poster image (JPEG, PNG, WEBP, GIF, max 5MB).",
     )
     def post(self, request, *args, **kwargs):
-        serializer = EventPosterUploadSerializer(data=request.data, context={'request': request})
+        serializer = EventPosterUploadSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
             logger.error(f"Event poster upload validation failed: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        event = serializer.validated_data['event']
-        image_file = serializer.validated_data['image']
+        event = serializer.validated_data["event"]
+        image_file = serializer.validated_data["image"]
 
         # Enforce organizer ownership boundary: organizer must own the event
         if not is_admin_user(request.user):
@@ -431,14 +435,14 @@ class EventPosterUploadView(APIView):
                 )
                 return Response(
                     {"detail": "You do not have permission to upload posters for this event."},
-                    status=status.HTTP_403_FORBIDDEN
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
         try:
             stored_filename = storage.upload_poster_to_minio(
                 file_obj=image_file,
                 filename=image_file.name,
-                content_type=getattr(image_file, 'content_type', 'image/jpeg')
+                content_type=getattr(image_file, "content_type", "image/jpeg"),
             )
         except Exception as exc:
             logger.error(f"Failed to upload poster to MinIO: {exc}")
@@ -448,7 +452,7 @@ class EventPosterUploadView(APIView):
             event=event,
             image=stored_filename,
         )
-        username = request.user.username if request.user and request.user.is_authenticated else 'anonymous'
+        username = request.user.username if request.user and request.user.is_authenticated else "anonymous"
         logger.info(
             f"Poster uploaded successfully for event '{event.name}' (ID: {event.id}): '{stored_filename}' "
             f"(Poster ID: {poster.id}) by user '{username}'"
@@ -459,7 +463,7 @@ class EventPosterUploadView(APIView):
                 "image": poster.image,
                 "event": str(poster.event_id),
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -469,7 +473,7 @@ class EventPostersListView(APIView):
 
     @extend_schema(
         responses={status.HTTP_200_OK: EventPosterSerializer(many=True)},
-        description="List all posters for a specific event."
+        description="List all posters for a specific event.",
     )
     def get(self, request, event_id, *args, **kwargs):
         try:
@@ -477,7 +481,7 @@ class EventPostersListView(APIView):
         except (Event.DoesNotExist, ValueError, ValidationError):
             return Response({"detail": "Event not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        posters = EventPoster.objects.filter(event=event).order_by('id')
+        posters = EventPoster.objects.filter(event=event).order_by("id")
         data = [
             {
                 "id": str(p.id),

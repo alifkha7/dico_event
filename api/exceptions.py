@@ -1,15 +1,16 @@
-from rest_framework.views import exception_handler
-from rest_framework.response import Response
-from rest_framework import status
 from loguru import logger
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import exception_handler
+
 
 def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
 
-    view_name = context.get('view').__class__.__name__ if context and context.get('view') else 'UnknownView'
-    request = context.get('request') if context else None
-    method = request.method if request else 'UNKNOWN'
-    path = request.path if request else 'UNKNOWN'
+    view_name = context.get("view").__class__.__name__ if context and context.get("view") else "UnknownView"
+    request = context.get("request") if context else None
+    method = request.method if request else "UNKNOWN"
+    path = request.path if request else "UNKNOWN"
 
     if response is not None:
         if response.status_code >= 400:
@@ -21,9 +22,6 @@ def custom_exception_handler(exc, context):
             f"Unhandled exception on {method} {path} in {view_name}: {exc}",
             exc_info=exc,
         )
-        response = Response(
-            {"detail": "Internal server error."},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        response = Response({"detail": "Internal server error."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return response
