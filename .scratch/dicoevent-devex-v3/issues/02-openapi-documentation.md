@@ -4,7 +4,7 @@
 
 **Blocked by:** 01: Database Query Optimization, Indexing & django-silk Profiling
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `drf-spectacular` is added to project dependencies and configured as the `DEFAULT_SCHEMA_CLASS` in Django REST Framework settings with `SPECTACULAR_SETTINGS` metadata (`title="DicoEvent API"`, `version="2.0.0"`, `SERVE_INCLUDE_SCHEMA=False`).
 - [ ] Unauthenticated `GET` requests to `/api/schema/`, `/api/docs/`, and `/api/redoc/` (with or without trailing slashes per ADR-0001) return `200 OK`.
