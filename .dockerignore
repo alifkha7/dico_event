@@ -1,0 +1,17 @@
+.git
+.pytest_cache
+.scratch
+__pycache__
+*.py[cod]
+*.log
+.env
+.env.*
+.venv
+venv
+Bangunindo-venv
+staticfiles
+media
+.coverage
+htmlcov
+.idea
+.vscode
