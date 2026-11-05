@@ -4,7 +4,7 @@
 
 **Blocked by:** 02: Automated OpenAPI 3.0 Documentation (drf-spectacular)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `gunicorn` and `whitenoise` are added to project dependencies, `WhiteNoiseMiddleware` is configured after `SecurityMiddleware`, and `STATIC_ROOT` is configured so static assets for Swagger UI, Redoc, Silk, and Django Admin are served directly by the application container.
 - [ ] A root `Dockerfile` based on `python:3.12-slim` installs dependencies, collects static files, and provides an entrypoint that runs database migrations before starting `gunicorn`.
