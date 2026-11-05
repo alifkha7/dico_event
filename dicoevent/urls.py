@@ -3,5 +3,6 @@ from django.urls import path, re_path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    re_path(r'^silk/', include('silk.urls', namespace='silk')),
     re_path(r'^api/', include('api.urls')),
 ]
