@@ -24,6 +24,8 @@ def setup_logging(base_dir=None):
     # Console sink (optional, for debugging)
     logger.add(sys.stdout, format=log_format, level="INFO")
 
+    use_enqueue = sys.platform != "win32"
+
     # application.log (INFO and above)
     app_log_path = base_dir / "application.log"
     logger.add(
@@ -31,7 +33,8 @@ def setup_logging(base_dir=None):
         format=log_format,
         level="INFO",
         rotation="1 day",
-        enqueue=True,
+        enqueue=use_enqueue,
+        delay=True,
     )
 
     # error.log (ERROR and above)
@@ -41,7 +44,8 @@ def setup_logging(base_dir=None):
         format=log_format,
         level="ERROR",
         rotation="1 day",
-        enqueue=True,
+        enqueue=use_enqueue,
+        delay=True,
     )
 
     _logging_initialized = True
