@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The `core` and `users` applications are registered in Django's installed applications under their canonical short labels (`core` and `users`), and `AUTH_USER_MODEL` is configured as `"users.User"`.
 - [ ] The `core` application provides a model-agnostic `DualKeyModelSerializer` base module that resolves `<field>` or `<field>_id` inputs using caller-supplied querysets and outputs both `<field>` and `<field>_id` as strings.
