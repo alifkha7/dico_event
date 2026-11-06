@@ -10,10 +10,16 @@ from apps.core.permissions import (
     is_admin_user,
     is_organizer_user,
 )
+from apps.events.permissions import (
+    CanUploadPosterPermission,
+    EventPosterUploadPermission,
+    EventViewSetPermission,
+)
 from apps.users.permissions import UserViewSetPermission
 
 __all__ = [
     "CanUploadPosterPermission",
+    "EventPosterUploadPermission",
     "EventViewSetPermission",
     "IsAdminOrSuperuser",
     "IsSuperuser",
@@ -28,54 +34,6 @@ __all__ = [
     "is_admin_user",
     "is_organizer_user",
 ]
-
-
-class CanUploadPosterPermission(permissions.BasePermission):
-    """Allows access to authenticated Superuser, Admin, or Organizer to upload posters."""
-
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        return can_create_or_manage_events(request.user)
-
-
-class EventViewSetPermission(permissions.BasePermission):
-    """
-    Permission logic for EventViewSet:
-    - GET (list): AllowAny per ADR-0001 / spec
-    - GET (retrieve): AllowAny per ADR-0001
-    - POST (create): Superuser, Admin, or Organizer
-    - PUT / PATCH (update):
-        - Superuser or Admin on any event
-        - Organizer only if event.organizer_id == request.user.id
-        - Others forbidden (403)
-    - DELETE (destroy):
-        - Superuser or Admin on any event
-        - Organizer only if event.organizer_id == request.user.id
-        - Others forbidden (403)
-    """
-
-    def has_permission(self, request, view):
-        if view.action in ["list", "retrieve"]:
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if view.action == "create":
-            return can_create_or_manage_events(request.user)
-        if view.action in ["update", "partial_update", "destroy"]:
-            return can_create_or_manage_events(request.user)
-        return False
-
-    def has_object_permission(self, request, view, obj):
-        if view.action == "retrieve":
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if is_admin_user(request.user):
-            return True
-        if is_organizer_user(request.user):
-            return str(obj.organizer_id) == str(request.user.id)
-        return False
 
 
 class TicketViewSetPermission(permissions.BasePermission):

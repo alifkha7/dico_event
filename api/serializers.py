@@ -1,8 +1,13 @@
 from django.contrib.auth import get_user_model
-from PIL import Image
 from rest_framework import serializers
 
 from apps.core.serializers import DualKeyModelSerializer, _resolve_foreign_key
+from apps.events.models import Event
+from apps.events.serializers import (
+    EventPosterSerializer,
+    EventPosterUploadSerializer,
+    EventSerializer,
+)
 from apps.users.serializers import (
     AssignRoleSerializer,
     CustomTokenObtainPairSerializer,
@@ -10,7 +15,7 @@ from apps.users.serializers import (
     UserSerializer,
 )
 
-from .models import Event, EventPoster, Payment, Registration, Ticket
+from .models import Payment, Registration, Ticket
 
 User = get_user_model()
 
@@ -28,69 +33,6 @@ __all__ = [
     "UserSerializer",
     "_resolve_foreign_key",
 ]
-
-
-class EventSerializer(serializers.ModelSerializer):
-    id = serializers.UUIDField(read_only=True)
-    quota = serializers.IntegerField(required=False)
-    organizer_id = serializers.CharField(required=False, write_only=False)
-
-    class Meta:
-        model = Event
-        fields = [
-            "id",
-            "name",
-            "description",
-            "location",
-            "start_time",
-            "end_time",
-            "status",
-            "quota",
-            "category",
-            "organizer_id",
-            "organizer",
-        ]
-        read_only_fields = ["id", "organizer"]
-
-    def validate(self, attrs):
-        request = self.context.get("request")
-
-        # Check required fields on creation
-        if self.instance is None:
-            required_fields = [
-                "name",
-                "description",
-                "location",
-                "start_time",
-                "end_time",
-                "status",
-                "quota",
-                "category",
-            ]
-            missing = [f for f in required_fields if f not in attrs and f not in self.initial_data]
-            if missing:
-                raise serializers.ValidationError({f: "This field is required." for f in missing})
-
-        _resolve_foreign_key(
-            attrs=attrs,
-            initial_data=self.initial_data,
-            instance=self.instance,
-            field_name="organizer",
-            id_keys=["organizer_id", "organizer"],
-            model_class=User,
-            default_fn=lambda: request.user if request and request.user and request.user.is_authenticated else None,
-            required_on_create=True,
-            label="Organizer",
-        )
-        return attrs
-
-    def to_representation(self, instance):
-        ret = super().to_representation(instance)
-        ret["id"] = str(instance.id)
-        ret["organizer"] = str(instance.organizer_id)
-        ret["organizer_id"] = str(instance.organizer_id)
-        ret["quota"] = int(instance.quota)
-        return ret
 
 
 class TicketSerializer(serializers.ModelSerializer):
@@ -175,6 +117,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
             model_class=User,
             default_fn=lambda: request.user if request and request.user and request.user.is_authenticated else None,
             required_on_create=True,
+            label="User",
         )
         return attrs
 
@@ -220,6 +163,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             id_keys=["registration_id", "registration"],
             model_class=Registration,
             required_on_create=True,
+            select_related=("user",),
         )
 
         # ADR-0001: Normalize 'completed' (case-insensitive) to 'Completed'
@@ -241,68 +185,3 @@ class PaymentSerializer(serializers.ModelSerializer):
             ret["payment_status"] = str(instance.payment_status)
         ret["amount_paid"] = int(instance.amount_paid)
         return ret
-
-
-class EventPosterSerializer(serializers.ModelSerializer):
-    id = serializers.UUIDField(read_only=True)
-    event = serializers.CharField(source="event_id", read_only=True)
-
-    class Meta:
-        model = EventPoster
-        fields = ["id", "image", "event"]
-
-    def to_representation(self, instance):
-        return {
-            "id": str(instance.id),
-            "image": instance.image,
-            "event": str(instance.event_id),
-        }
-
-
-class EventPosterUploadSerializer(serializers.Serializer):
-    event = serializers.CharField(required=True)
-    image = serializers.FileField(required=True)
-
-    def to_internal_value(self, data):
-        data_dict = {}
-        if hasattr(data, "dict"):
-            data_dict = data.dict()
-        elif isinstance(data, dict):
-            data_dict = data.copy()
-        else:
-            for k, v in data.items():
-                data_dict[k] = v
-
-        if "event_id" in data_dict and "event" not in data_dict:
-            data_dict["event"] = data_dict["event_id"]
-
-        return super().to_internal_value(data_dict)
-
-    def validate_event(self, value):
-        try:
-            event = Event.objects.get(id=value)
-            return event
-        except (Event.DoesNotExist, ValueError, TypeError):
-            raise serializers.ValidationError("Event not found.")
-
-    def validate_image(self, value):
-        # 1. Size limit: 500 KB = 500 * 1024 = 512,000 bytes
-        max_size = 500 * 1024
-        if value.size > max_size:
-            raise serializers.ValidationError(f"File size exceeds the 500 KB limit ({value.size} bytes).")
-
-        # 2. Content-type check
-        content_type = getattr(value, "content_type", "")
-        if not content_type or not content_type.startswith("image/"):
-            raise serializers.ValidationError("File must have an image/* MIME type.")
-
-        # 3. Verification using Pillow
-        try:
-            img = Image.open(value)
-            img.verify()
-            if hasattr(value, "seek"):
-                value.seek(0)
-        except Exception:
-            raise serializers.ValidationError("Uploaded file is not a valid image.")
-
-        return value

@@ -4,10 +4,10 @@
 
 **Blocked by:** 01: Core Infrastructure (`core`) & Users Domain Application (`users`) Cutover
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] The `events` application is registered in Django's installed applications under the `events` label and owns the **Event** (`db_table = "events"`, with database indexes on `start_time`, `status`, and `category`) and **Event Poster** (`db_table = "event_posters"`) models and their initial migration.
-- [ ] **Event** serialization uses `DualKeyModelSerializer` for `organizer` / `organizer_id` resolution, and **Event** permissions use the declarative RBAC/ownership policy (allowing public list/retrieve, **Admin**/**Superuser** full access, and **Organizer** ownership on mutations).
-- [ ] `CachedEventViewSetMixin` in the `events` caching module encapsulates list and detail cache reads/writes, query-string normalization, `X-Data-Source` response header injection (`cache` or `database`), and automatic cache invalidation across create, update, and destroy operations, leaving `EventViewSet` free of manual cache orchestration.
-- [ ] The `events` storage module provides `attach_event_poster` alongside `upload_poster_to_minio`, `get_minio_client`, and `parse_minio_endpoint`, encapsulating **Organizer** ownership verification, MinIO object upload, and **Event Poster** persistence; both poster upload and poster list views serialize responses via `EventPosterSerializer`.
-- [ ] All **Event**, **Event** caching, and **Event Poster** test suites are updated to import from the `events` application, and the entire test suite and `ruff` checks pass.
+- [x] The `events` application is registered in Django's installed applications under the `events` label and owns the **Event** (`db_table = "events"`, with database indexes on `start_time`, `status`, and `category`) and **Event Poster** (`db_table = "event_posters"`) models and their initial migration.
+- [x] **Event** serialization uses `DualKeyModelSerializer` for `organizer` / `organizer_id` resolution, and **Event** permissions use the declarative RBAC/ownership policy (allowing public list/retrieve, **Admin**/**Superuser** full access, and **Organizer** ownership on mutations).
+- [x] `CachedEventViewSetMixin` in the `events` caching module encapsulates list and detail cache reads/writes, query-string normalization, `X-Data-Source` response header injection (`cache` or `database`), and automatic cache invalidation across create, update, and destroy operations, leaving `EventViewSet` free of manual cache orchestration.
+- [x] The `events` storage module provides `attach_event_poster` alongside `upload_poster_to_minio`, `get_minio_client`, and `parse_minio_endpoint`, encapsulating **Organizer** ownership verification, MinIO object upload, and **Event Poster** persistence; both poster upload and poster list views serialize responses via `EventPosterSerializer`.
+- [x] All **Event**, **Event** caching, and **Event Poster** test suites are updated to import from the `events` application, and the entire test suite and `ruff` checks pass.

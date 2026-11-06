@@ -5,6 +5,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework import status
 
+from apps.events.models import Event
+from apps.events.views import EventViewSet
+
 User = get_user_model()
 
 
@@ -414,3 +417,12 @@ def test_delete_event_regular_user_forbidden(
     res_del = api_client.delete(f"/api/events/{event_id}/", **get_auth_header(regular_user))
     assert res_del.status_code == status.HTTP_403_FORBIDDEN
     assert api_client.get(f"/api/events/{event_id}/").status_code == status.HTTP_200_OK
+
+
+def test_events_app_direct_imports():
+    """Verify Event model and EventViewSet are configured under apps.events with deep mixin."""
+    from apps.events.caching import CachedEventViewSetMixin
+
+    assert Event._meta.app_label == "events"
+    assert Event._meta.db_table == "events"
+    assert issubclass(EventViewSet, CachedEventViewSetMixin)

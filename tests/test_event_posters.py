@@ -7,9 +7,10 @@ import pytest
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
-from rest_framework import status
+from rest_framework import exceptions, status
 
-from api.models import Event, EventPoster
+from apps.events.models import Event, EventPoster
+from apps.events.storage import attach_event_poster
 
 # ==========================================
 # Helpers for image generation
@@ -64,7 +65,7 @@ def test_get_minio_client_configuration(monkeypatch):
     monkeypatch.setattr(settings, "MINIO_ACCESS_KEY", "custom_access")
     monkeypatch.setattr(settings, "MINIO_SECRET_KEY", "custom_secret")
 
-    from api.storage import get_minio_client
+    from apps.events.storage import get_minio_client
 
     client = get_minio_client()
     assert client._base_url._url.netloc == "minio.custom.local:9000"
@@ -76,7 +77,7 @@ def test_get_minio_client_configuration(monkeypatch):
 
 def test_get_minio_client_endpoint_parsing():
     """Verify endpoint parsing handles raw host:port, http://, and https://."""
-    from api.storage import parse_minio_endpoint
+    from apps.events.storage import parse_minio_endpoint
 
     endpoint, secure = parse_minio_endpoint("http://minio.test:9000")
     assert endpoint == "minio.test:9000"
@@ -100,8 +101,8 @@ def test_upload_poster_to_minio_creates_bucket_if_missing(monkeypatch):
     mock_client = MagicMock()
     mock_client.bucket_exists.return_value = False
 
-    with patch("api.storage.get_minio_client", return_value=mock_client):
-        from api.storage import upload_poster_to_minio
+    with patch("apps.events.storage.get_minio_client", return_value=mock_client):
+        from apps.events.storage import upload_poster_to_minio
 
         fake_file = io.BytesIO(b"fake image data")
         result_key = upload_poster_to_minio(fake_file, "poster.png", "image/png")
@@ -141,7 +142,7 @@ def test_event_poster_model_creation(sample_event):
 @pytest.mark.django_db
 def test_upload_poster_valid_image(api_client, superuser, admin_user, organizer_user, get_auth_header, sample_event):
     """Verify Superuser, Admin, and Organizer can upload valid poster images <= 500 KB."""
-    with patch("api.storage.upload_poster_to_minio", return_value="stored_poster_key_1.png") as mock_upload:
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="stored_poster_key_1.png") as mock_upload:
         # 1. Superuser upload
         image = create_valid_test_image()
         res = api_client.post(
@@ -156,7 +157,7 @@ def test_upload_poster_valid_image(api_client, superuser, admin_user, organizer_
         assert "event" in res.data and res.data["event"] == str(sample_event.id)
         mock_upload.assert_called_once()
 
-    with patch("api.storage.upload_poster_to_minio", return_value="stored_poster_key_2.png"):
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="stored_poster_key_2.png"):
         # 2. Organizer upload
         image2 = create_valid_test_image(format="JPEG")
         res2 = api_client.post(
@@ -168,7 +169,7 @@ def test_upload_poster_valid_image(api_client, superuser, admin_user, organizer_
         assert res2.status_code == status.HTTP_201_CREATED
         assert res2.data["image"] == "stored_poster_key_2.png"
 
-    with patch("api.storage.upload_poster_to_minio", return_value="stored_poster_key_3.png"):
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="stored_poster_key_3.png"):
         # 3. Admin upload
         image3 = create_valid_test_image()
         res3 = api_client.post(
@@ -187,7 +188,7 @@ def test_upload_poster_valid_image(api_client, superuser, admin_user, organizer_
 @pytest.mark.django_db
 def test_upload_poster_no_trailing_slash(api_client, organizer_user, get_auth_header, sample_event):
     """Verify POST /api/events/upload without trailing slash works per ADR-0001."""
-    with patch("api.storage.upload_poster_to_minio", return_value="notrail_key.png"):
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="notrail_key.png"):
         image = create_valid_test_image()
         res = api_client.post(
             "/api/events/upload",
@@ -229,7 +230,7 @@ def test_upload_poster_missing_fields(api_client, organizer_user, get_auth_heade
 @pytest.mark.django_db
 def test_upload_poster_non_image_file_rejected(api_client, organizer_user, get_auth_header, sample_event):
     """Verify non-image files (.txt, .pdf, or disguised image) are rejected with 400."""
-    with patch("api.storage.upload_poster_to_minio") as mock_upload:
+    with patch("apps.events.storage.upload_poster_to_minio") as mock_upload:
         # Plain text
         txt_file = SimpleUploadedFile("readme.txt", b"plain text content", content_type="text/plain")
         res1 = api_client.post(
@@ -270,7 +271,7 @@ def test_upload_poster_non_image_file_rejected(api_client, organizer_user, get_a
 @pytest.mark.django_db
 def test_upload_poster_oversized_image_rejected(api_client, organizer_user, get_auth_header, sample_event):
     """Verify images > 500 KB (512,000 bytes) are rejected with 400 Bad Request."""
-    with patch("api.storage.upload_poster_to_minio") as mock_upload:
+    with patch("apps.events.storage.upload_poster_to_minio") as mock_upload:
         large_image = create_oversized_test_image()
         res = api_client.post(
             "/api/events/upload/",
@@ -390,3 +391,58 @@ def test_get_event_posters_empty_and_not_found(api_client, sample_event):
     random_id = uuid.uuid4()
     res_404 = api_client.get(f"/api/events/{random_id}/poster/")
     assert res_404.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ==========================================
+# 5. Deep Intake Seam Tests: attach_event_poster
+# ==========================================
+
+
+@pytest.mark.django_db
+def test_attach_event_poster_organizer_success(sample_event, organizer_user):
+    """Verify attach_event_poster uploads image to MinIO and creates EventPoster for owner Organizer."""
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="attached_owner_key.png") as mock_upload:
+        image = create_valid_test_image()
+        poster = attach_event_poster(sample_event, image, organizer_user)
+        assert poster.id is not None
+        assert poster.image == "attached_owner_key.png"
+        assert poster.event_id == sample_event.id
+        mock_upload.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_attach_event_poster_admin_and_superuser_bypass(sample_event, admin_user, superuser):
+    """Verify attach_event_poster allows Admin and Superuser to attach poster to any event."""
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="attached_admin_key.png"):
+        image1 = create_valid_test_image()
+        poster1 = attach_event_poster(sample_event, image1, admin_user)
+        assert poster1.image == "attached_admin_key.png"
+
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="attached_superuser_key.png"):
+        image2 = create_valid_test_image()
+        poster2 = attach_event_poster(sample_event, image2, superuser)
+        assert poster2.image == "attached_superuser_key.png"
+
+
+@pytest.mark.django_db
+def test_attach_event_poster_non_owner_forbidden(sample_event, organizer_group, regular_user):
+    """Verify attach_event_poster raises PermissionDenied for non-owner Organizer and regular user."""
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    other_org = User.objects.create_user(
+        username="another_org_attacher", email="another_attacher@dicoevent.com", password="password123"
+    )
+    other_org.groups.add(organizer_group)
+
+    image = create_valid_test_image()
+    with patch("apps.events.storage.upload_poster_to_minio") as mock_upload:
+        with pytest.raises(exceptions.PermissionDenied) as exc1:
+            attach_event_poster(sample_event, image, other_org)
+        assert "You do not have permission to upload a poster for this event." in str(exc1.value)
+        mock_upload.assert_not_called()
+
+        with pytest.raises(exceptions.PermissionDenied) as exc2:
+            attach_event_poster(sample_event, image, regular_user)
+        assert "You do not have permission to upload a poster for this event." in str(exc2.value)
+        mock_upload.assert_not_called()
