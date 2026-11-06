@@ -1,10 +1,9 @@
 import uuid
 
 import pytest
-from django.contrib.auth import get_user_model
 from rest_framework import status
 
-User = get_user_model()
+from apps.users.models import User
 
 
 @pytest.mark.django_db

@@ -1,60 +1,33 @@
 from rest_framework import permissions
 
+from apps.core.permissions import (
+    IsAdminOrSuperuser,
+    IsSuperuser,
+    RoleOwnershipPermission,
+    _get_user_group_names_lower,
+    can_create_or_manage_events,
+    get_user_role_names,
+    is_admin_user,
+    is_organizer_user,
+)
+from apps.users.permissions import UserViewSetPermission
 
-def _get_user_group_names_lower(user):
-    """
-    Return a set of lowercase group names for the user, cached on the user instance.
-    Checks user._prefetched_objects_cache if groups were prefetched, avoiding extra queries.
-    """
-    if not user or not getattr(user, "is_authenticated", False):
-        return set()
-    cached = getattr(user, "_cached_group_names_lower", None)
-    if cached is not None:
-        return cached
-
-    prefetched_cache = getattr(user, "_prefetched_objects_cache", {})
-    if "groups" in prefetched_cache:
-        names = {g.name.lower() for g in prefetched_cache["groups"]}
-    else:
-        names = {name.lower() for name in user.groups.values_list("name", flat=True)}
-
-    user._cached_group_names_lower = names
-    return names
-
-
-def is_admin_user(user):
-    """Check if user is a Superuser or member of an 'admin' group (case-insensitive)."""
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-    if getattr(user, "is_superuser", False):
-        return True
-    return "admin" in _get_user_group_names_lower(user)
-
-
-def is_organizer_user(user):
-    """Check if user is a member of an 'organizer' group (case-insensitive)."""
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-    return "organizer" in _get_user_group_names_lower(user)
-
-
-def can_create_or_manage_events(user):
-    """Check if user has permission to create or manage events."""
-    return is_admin_user(user) or is_organizer_user(user)
-
-
-class IsSuperuser(permissions.BasePermission):
-    """Allows access only to superusers."""
-
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
-
-
-class IsAdminOrSuperuser(permissions.BasePermission):
-    """Allows access to superusers or members of the admin group."""
-
-    def has_permission(self, request, view):
-        return bool(is_admin_user(request.user))
+__all__ = [
+    "CanUploadPosterPermission",
+    "EventViewSetPermission",
+    "IsAdminOrSuperuser",
+    "IsSuperuser",
+    "PaymentViewSetPermission",
+    "RegistrationViewSetPermission",
+    "RoleOwnershipPermission",
+    "TicketViewSetPermission",
+    "UserViewSetPermission",
+    "_get_user_group_names_lower",
+    "can_create_or_manage_events",
+    "get_user_role_names",
+    "is_admin_user",
+    "is_organizer_user",
+]
 
 
 class CanUploadPosterPermission(permissions.BasePermission):
@@ -64,37 +37,6 @@ class CanUploadPosterPermission(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         return can_create_or_manage_events(request.user)
-
-
-class UserViewSetPermission(permissions.BasePermission):
-    """
-    Permission logic for UserViewSet:
-    - POST (register): AllowAny
-    - GET (detail/retrieve): AllowAny per ADR-0001
-    - GET (list): Admin or Superuser only (Authenticated User gets 403, Unauthenticated gets 401)
-    - PUT/PATCH: Authenticated (Self, Admin, or Superuser)
-    - DELETE: Admin or Superuser only (Authenticated regular User gets 403 per Story 9 / Spec)
-    """
-
-    def has_permission(self, request, view):
-        if view.action in ["create", "retrieve"]:
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if view.action in ["list", "destroy"]:
-            return is_admin_user(request.user)
-        return True
-
-    def has_object_permission(self, request, view, obj):
-        if view.action == "retrieve":
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if is_admin_user(request.user):
-            return True
-        if view.action == "destroy":
-            return False
-        return str(obj.id) == str(request.user.id)
 
 
 class EventViewSetPermission(permissions.BasePermission):

@@ -70,6 +70,7 @@ def test_settings_redis_cache_configuration(monkeypatch):
     assert settings.REDIS_PORT == "6379"
     assert getattr(settings, "CACHE_TTL", None) == 3600
     assert settings.CACHES["default"]["TIMEOUT"] == 3600
+
     assert settings.CACHES["default"]["BACKEND"] == "django_redis.cache.RedisCache"
     assert settings.CACHES["default"]["LOCATION"] == "redis://localhost:6379/1"
 
@@ -77,3 +78,16 @@ def test_settings_redis_cache_configuration(monkeypatch):
     monkeypatch.setenv("USE_SQLITE_TEST", "True")
     importlib.reload(settings)
     assert settings.CACHES["default"]["TIMEOUT"] == 3600
+
+
+def test_core_and_users_apps_configured():
+    """Verify core and users applications are installed and configured with canonical labels."""
+    from django.apps import apps
+    from django.conf import settings
+
+    assert "apps.core" in settings.INSTALLED_APPS or "apps.core.apps.CoreConfig" in settings.INSTALLED_APPS
+    assert "apps.users" in settings.INSTALLED_APPS or "apps.users.apps.UsersConfig" in settings.INSTALLED_APPS
+    assert apps.get_app_config("core").label == "core"
+    assert apps.get_app_config("users").label == "users"
+    assert settings.AUTH_USER_MODEL == "users.User"
+    assert settings.REST_FRAMEWORK.get("EXCEPTION_HANDLER") == "apps.core.exceptions.custom_exception_handler"

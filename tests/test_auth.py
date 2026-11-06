@@ -2,6 +2,14 @@ import pytest
 from rest_framework import status
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.users.views import CustomTokenObtainPairView, CustomTokenRefreshView
+
+
+def test_auth_views_configured():
+    """Verify auth views use the users app implementations."""
+    assert CustomTokenObtainPairView is not None
+    assert CustomTokenRefreshView is not None
+
 
 @pytest.mark.django_db
 def test_preseeded_superuser_login(api_client, superuser):
