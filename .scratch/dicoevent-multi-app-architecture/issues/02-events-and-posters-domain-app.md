@@ -4,7 +4,7 @@
 
 **Blocked by:** 01: Core Infrastructure (`core`) & Users Domain Application (`users`) Cutover
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The `events` application is registered in Django's installed applications under the `events` label and owns the **Event** (`db_table = "events"`, with database indexes on `start_time`, `status`, and `category`) and **Event Poster** (`db_table = "event_posters"`) models and their initial migration.
 - [ ] **Event** serialization uses `DualKeyModelSerializer` for `organizer` / `organizer_id` resolution, and **Event** permissions use the declarative RBAC/ownership policy (allowing public list/retrieve, **Admin**/**Superuser** full access, and **Organizer** ownership on mutations).
