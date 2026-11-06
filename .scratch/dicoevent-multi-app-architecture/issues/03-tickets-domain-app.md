@@ -4,7 +4,7 @@
 
 **Blocked by:** 02: Deepened Events & Event Posters Domain Application (`events`)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The `tickets` application is registered in Django's installed applications under the `tickets` label and owns the **Ticket** model (`db_table = "tickets"`, cascading delete from **Event**) and its initial migration.
 - [ ] `TicketSerializer` inherits from `DualKeyModelSerializer` to resolve `event` / `event_id` with caller-supplied eager-loading hints and enforces non-negative `price`, positive `quota`, and `sales_start < sales_end`.
