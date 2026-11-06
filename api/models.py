@@ -2,33 +2,16 @@ import uuid
 
 from django.db import models
 
+from apps.events.models import Event, EventPoster
 from apps.users.models import User
 
-
-class Event(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255)
-    description = models.TextField()
-    location = models.CharField(max_length=255)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
-    status = models.CharField(max_length=50)
-    quota = models.IntegerField()
-    category = models.CharField(max_length=100)
-    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="events")
-
-    class Meta:
-        db_table = "events"
-        verbose_name = "Event"
-        verbose_name_plural = "Events"
-        indexes = [
-            models.Index(fields=["start_time"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["category"]),
-        ]
-
-    def __str__(self):
-        return self.name
+__all__ = [
+    "Event",
+    "EventPoster",
+    "Payment",
+    "Registration",
+    "Ticket",
+]
 
 
 class Ticket(models.Model):
@@ -87,17 +70,3 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Payment {self.id} - {self.payment_status}"
-
-
-class EventPoster(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="posters")
-    image = models.CharField(max_length=500)
-
-    class Meta:
-        db_table = "event_posters"
-        verbose_name = "Event Poster"
-        verbose_name_plural = "Event Posters"
-
-    def __str__(self):
-        return f"Poster for {self.event.name}: {self.image}"

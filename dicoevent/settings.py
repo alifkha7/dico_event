@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     # Local apps
     "apps.core",
     "apps.users",
+    "apps.events",
     "api.apps.ApiConfig",
 ]
 

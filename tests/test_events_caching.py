@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from rest_framework import status
 
-from api.models import Event
+from apps.events.models import Event
 
 User = get_user_model()
 
@@ -361,3 +361,73 @@ def test_caching_events_complete_15_step_sequence(
     assert s15_hit.status_code == status.HTTP_200_OK
     assert s15_hit.headers.get("X-Data-Source") == "cache"
     assert not any(e["id"] == event_id for e in s15_hit.data["events"])
+
+
+# =========================================================================
+# 7. CachedEventViewSetMixin Seam Unit Tests
+# =========================================================================
+
+
+@pytest.mark.django_db
+def test_cached_event_viewset_mixin_direct_lifecycle(sample_event_payload, organizer_user):
+    """Verify CachedEventViewSetMixin intercepts list, retrieve, perform_create, perform_update, and perform_destroy."""
+    from rest_framework.test import APIRequestFactory, force_authenticate
+
+    from apps.events.caching import get_cached_event_detail, get_cached_event_list
+    from apps.events.views import EventViewSet
+
+    factory = APIRequestFactory()
+    view_list = EventViewSet.as_view({"get": "list", "post": "create"})
+    view_detail = EventViewSet.as_view(
+        {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+    )
+
+    # 1. POST creates event and invalidates cache
+    req_post = factory.post("/api/events/", sample_event_payload, format="json")
+    force_authenticate(req_post, user=organizer_user)
+    res_post = view_list(req_post)
+    assert res_post.status_code == status.HTTP_201_CREATED
+    created_id = res_post.data["id"]
+
+    # 2. GET list returns database and caches
+    req_list = factory.get("/api/events/")
+    res_list1 = view_list(req_list)
+    assert res_list1.status_code == status.HTTP_200_OK
+    assert res_list1.headers.get("X-Data-Source") == "database"
+    assert get_cached_event_list("") is not None
+
+    # 3. GET list second call returns cache
+    req_list2 = factory.get("/api/events/")
+    res_list2 = view_list(req_list2)
+    assert res_list2.headers.get("X-Data-Source") == "cache"
+
+    # 4. GET detail returns database and caches
+    req_detail = factory.get(f"/api/events/{created_id}/")
+    res_det1 = view_detail(req_detail, pk=created_id)
+    assert res_det1.status_code == status.HTTP_200_OK
+    assert res_det1.headers.get("X-Data-Source") == "database"
+    assert get_cached_event_detail(str(created_id)) is not None
+
+    # 5. GET detail second call returns cache
+    req_detail2 = factory.get(f"/api/events/{created_id}/")
+    res_det2 = view_detail(req_detail2, pk=created_id)
+    assert res_det2.headers.get("X-Data-Source") == "cache"
+
+    # 6. PUT detail invalidates detail and list caches
+    req_put = factory.put(f"/api/events/{created_id}/", {"name": "Updated by Mixin"}, format="json")
+    force_authenticate(req_put, user=organizer_user)
+    res_put = view_detail(req_put, pk=created_id)
+    assert res_put.status_code == status.HTTP_200_OK
+    assert get_cached_event_detail(str(created_id)) is None
+    assert get_cached_event_list("") is None
+
+    # 7. Repopulate detail cache and DELETE invalidates detail and list caches
+    req_detail3 = factory.get(f"/api/events/{created_id}/")
+    view_detail(req_detail3, pk=created_id)
+    assert get_cached_event_detail(str(created_id)) is not None
+    req_del = factory.delete(f"/api/events/{created_id}/")
+    force_authenticate(req_del, user=organizer_user)
+    res_del = view_detail(req_del, pk=created_id)
+    assert res_del.status_code == status.HTTP_204_NO_CONTENT
+    assert get_cached_event_detail(str(created_id)) is None
+    assert get_cached_event_list("") is None
