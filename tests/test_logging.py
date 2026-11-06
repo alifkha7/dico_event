@@ -2,6 +2,14 @@ import pytest
 from django.conf import settings
 from loguru import logger
 
+from apps.core.logging_config import setup_logging
+
+
+def test_core_logging_setup_callable():
+    """Verify setup_logging from apps.core.logging_config returns logger."""
+    core_logger = setup_logging()
+    assert core_logger is not None
+
 
 @pytest.mark.django_db
 def test_loguru_application_and_error_logging(api_client, regular_user):
