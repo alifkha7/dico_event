@@ -220,3 +220,34 @@ def test_partial_update_mixin():
     res = mixin.update(None)
     # partial is defaulted to True
     assert res.get("partial") is True
+
+
+def test_core_modules_do_not_import_domain_apps():
+    """Verify apps.core modules never import from domain apps or legacy api."""
+    import ast
+    from pathlib import Path
+
+    from django.conf import settings
+
+    core_dir = Path(settings.BASE_DIR) / "apps" / "core"
+    forbidden_prefixes = (
+        "apps.users",
+        "apps.events",
+        "apps.tickets",
+        "apps.registrations",
+        "apps.payments",
+        "api",
+    )
+
+    for py_file in core_dir.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert not alias.name.startswith(forbidden_prefixes), (
+                        f"{py_file.name} imports forbidden domain module '{alias.name}'"
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith(forbidden_prefixes), (
+                    f"{py_file.name} imports from forbidden domain module '{node.module}'"
+                )

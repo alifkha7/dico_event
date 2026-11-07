@@ -1,6 +1,6 @@
 # DicoEvent
 
-DicoEvent is an event management and ticketing platform built by DicoTech that enables organizers and administrators to publish events, sell tickets, manage attendee registrations, process payments, upload promotional posters, and send automated event reminders.
+DicoEvent is an event management and ticketing platform built by DicoTech that enables Organizers and Admins to publish Events, sell Tickets, manage User Registrations, process Payments, upload Event Posters, and send automated Event reminders.
 
 ## Language
 
@@ -29,7 +29,7 @@ _Avoid_: Role table, permission set, profile type
 ### Core Domain Entities
 
 **Event**:
-A scheduled gathering or activity (such as a seminar) hosted by an Organizer at a specific location and time window with a maximum attendee quota.
+A scheduled gathering (such as a seminar) hosted by an Organizer at a specific location and time window with a maximum participant quota.
 _Avoid_: Show, session, activity, concert
 
 **Event Poster**:
@@ -37,11 +37,11 @@ A promotional image file (up to 500 KB) uploaded to object storage and associate
 _Avoid_: Banner, thumbnail, attachment, cover photo
 
 **Ticket**:
-A purchasable admission tier for a specific Event, defined by a name (such as VIP), price, sales window (`sales_start` to `sales_end`), and ticket quota.
+A purchasable admission category for a specific Event, defined by a name (such as VIP), price, sales window (`sales_start` to `sales_end`), and ticket quota.
 _Avoid_: Pass, seat, tier, voucher
 
 **Registration**:
-A record of a User booking a specific Ticket for an Event, which triggers an asynchronous reminder notification prior to the Event.
+A record of a User registering for a specific Ticket for an Event, which triggers an asynchronous reminder notification prior to the Event.
 _Avoid_: Booking, order, reservation, enrollment
 
 **Payment**:
