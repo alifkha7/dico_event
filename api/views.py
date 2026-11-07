@@ -11,6 +11,7 @@ from apps.events.views import (
     EventSetPagination,
     EventViewSet,
 )
+from apps.registrations.views import RegistrationViewSet
 from apps.tickets.views import TicketViewSet
 from apps.users.serializers import (
     AssignRoleSerializer,
@@ -25,10 +26,9 @@ from apps.users.views import (
     UserViewSet,
 )
 
-from .models import Payment, Registration
+from .models import Payment
 from .permissions import (
     PaymentViewSetPermission,
-    RegistrationViewSetPermission,
 )
 from .serializers import (
     EventPosterSerializer,
@@ -65,51 +65,6 @@ __all__ = [
     "UserSerializer",
     "UserViewSet",
 ]
-
-
-class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
-    queryset = Registration.objects.select_related("ticket", "ticket__event", "user").all().order_by("id")
-    serializer_class = RegistrationSerializer
-    permission_classes = [RegistrationViewSetPermission]
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        serializer = self.get_serializer(queryset, many=True)
-        logger.info(f"Listing registrations: count={len(serializer.data)}")
-        return Response({"registrations": serializer.data})
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        logger.info(f"Retrieved registration: (ID: {instance.id})")
-        return Response(serializer.data)
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        registration = serializer.save()
-        logger.info(f"Registration created successfully: (ID: {registration.id})")
-
-        # Schedule reminder email
-        try:
-            from api.tasks import schedule_event_reminder
-
-            schedule_event_reminder(registration)
-        except Exception as e:
-            logger.error(f"Failed to schedule event reminder for registration {registration.id}: {e}")
-
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    def perform_update(self, serializer):
-        registration = serializer.save()
-        logger.info(f"Registration updated successfully: (ID: {registration.id})")
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        registration_id = str(instance.id)
-        self.perform_destroy(instance)
-        logger.info(f"Registration deleted successfully: (ID: {registration_id})")
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):

@@ -7,7 +7,13 @@ from django.core import mail
 from loguru import logger
 from rest_framework import status
 
-from api.models import Event, Registration, Ticket
+from apps.events.models import Event
+from apps.registrations.models import Registration
+from apps.registrations.tasks import (
+    schedule_event_reminder,
+    send_event_reminder_email,
+)
+from apps.tickets.models import Ticket
 
 
 @pytest.fixture
@@ -148,7 +154,6 @@ def test_celery_and_email_settings_from_env(monkeypatch):
 @pytest.mark.django_db
 def test_send_event_reminder_email_task_success(future_ticket, regular_user):
     """Verify send_event_reminder_email delivers email with event details and logs INFO."""
-    from api.tasks import send_event_reminder_email
 
     registration = Registration.objects.create(ticket=future_ticket, user=regular_user)
     event = future_ticket.event
@@ -176,14 +181,13 @@ def test_send_event_reminder_email_task_success(future_ticket, regular_user):
 @pytest.mark.django_db
 def test_send_event_reminder_email_task_failure_logs_error(future_ticket, regular_user, monkeypatch):
     """Verify send_event_reminder_email logs ERROR to error.log and raises on exception."""
-    from api.tasks import send_event_reminder_email
 
     registration = Registration.objects.create(ticket=future_ticket, user=regular_user)
 
     def mock_send_mail(*args, **kwargs):
         raise RuntimeError("Simulated SMTP network failure")
 
-    monkeypatch.setattr("api.tasks.send_mail", mock_send_mail)
+    monkeypatch.setattr("apps.registrations.tasks.send_mail", mock_send_mail)
 
     with pytest.raises(RuntimeError, match="Simulated SMTP network failure"):
         send_event_reminder_email(str(registration.id))
@@ -205,7 +209,6 @@ def test_send_event_reminder_email_task_failure_logs_error(future_ticket, regula
 @pytest.mark.django_db
 def test_schedule_event_reminder_future_event(future_ticket, regular_user):
     """Verify event starting in future schedules task with apply_async and eta = start_time - 2h."""
-    from api.tasks import schedule_event_reminder, send_event_reminder_email
 
     registration = Registration.objects.create(ticket=future_ticket, user=regular_user)
     event = future_ticket.event
@@ -229,7 +232,6 @@ def test_schedule_event_reminder_future_event(future_ticket, regular_user):
 @pytest.mark.django_db
 def test_schedule_event_reminder_imminent_event(imminent_ticket, regular_user):
     """Verify event whose start_time - 2h is in the past dispatches immediately via delay()."""
-    from api.tasks import schedule_event_reminder, send_event_reminder_email
 
     registration = Registration.objects.create(ticket=imminent_ticket, user=regular_user)
 
@@ -247,7 +249,6 @@ def test_schedule_event_reminder_imminent_event(imminent_ticket, regular_user):
 @pytest.mark.django_db
 def test_schedule_event_reminder_historical_event(historical_ticket, regular_user):
     """Verify historical event (e.g. Postman test date) dispatches immediately via delay()."""
-    from api.tasks import schedule_event_reminder, send_event_reminder_email
 
     registration = Registration.objects.create(ticket=historical_ticket, user=regular_user)
 
@@ -265,7 +266,6 @@ def test_schedule_event_reminder_historical_event(historical_ticket, regular_use
 @pytest.mark.django_db
 def test_schedule_event_reminder_catches_broker_exception(future_ticket, regular_user):
     """Verify broker connection errors are caught gracefully and do not propagate."""
-    from api.tasks import schedule_event_reminder, send_event_reminder_email
 
     registration = Registration.objects.create(ticket=future_ticket, user=regular_user)
 
@@ -287,7 +287,6 @@ def test_schedule_event_reminder_catches_broker_exception(future_ticket, regular
 @pytest.mark.django_db
 def test_create_registration_api_schedules_future_reminder(api_client, regular_user, get_auth_header, future_ticket):
     """Verify POST /api/registrations/ calculates eta and schedules reminder."""
-    from api.tasks import send_event_reminder_email
 
     headers = get_auth_header(regular_user)
     payload = {"ticket": str(future_ticket.id)}
@@ -311,7 +310,6 @@ def test_create_registration_api_dispatches_imminent_reminder(
     api_client, regular_user, get_auth_header, imminent_ticket
 ):
     """Verify POST /api/registrations/ calls delay() for imminent event (start_time - 2h < now)."""
-    from api.tasks import send_event_reminder_email
 
     headers = get_auth_header(regular_user)
     payload = {"ticket": str(imminent_ticket.id)}

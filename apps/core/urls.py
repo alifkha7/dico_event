@@ -15,5 +15,6 @@ urlpatterns = [
     re_path(r"^", include("apps.users.urls")),
     re_path(r"^", include("apps.events.urls")),
     re_path(r"^", include("apps.tickets.urls")),
+    re_path(r"^", include("apps.registrations.urls")),
     re_path(r"^", include("api.urls")),
 ]

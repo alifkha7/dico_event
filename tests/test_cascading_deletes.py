@@ -4,7 +4,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework import status
 
-from api.models import Event, Payment, Registration, Ticket
+from api.models import Payment
+from apps.events.models import Event
+from apps.registrations.models import Registration
+from apps.tickets.models import Ticket
 
 User = get_user_model()
 

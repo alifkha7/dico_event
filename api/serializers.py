@@ -1,4 +1,3 @@
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.core.serializers import DualKeyModelSerializer, _resolve_foreign_key
@@ -7,6 +6,7 @@ from apps.events.serializers import (
     EventPosterUploadSerializer,
     EventSerializer,
 )
+from apps.registrations.serializers import RegistrationSerializer
 from apps.tickets.serializers import TicketSerializer
 from apps.users.serializers import (
     AssignRoleSerializer,
@@ -15,9 +15,7 @@ from apps.users.serializers import (
     UserSerializer,
 )
 
-from .models import Payment, Registration, Ticket
-
-User = get_user_model()
+from .models import Payment, Registration
 
 __all__ = [
     "AssignRoleSerializer",
@@ -33,53 +31,6 @@ __all__ = [
     "UserSerializer",
     "_resolve_foreign_key",
 ]
-
-
-class RegistrationSerializer(serializers.ModelSerializer):
-    id = serializers.UUIDField(read_only=True)
-    ticket_id = serializers.CharField(required=False, write_only=False)
-    user_id = serializers.CharField(required=False, write_only=False)
-
-    class Meta:
-        model = Registration
-        fields = ["id", "ticket", "ticket_id", "user", "user_id"]
-        read_only_fields = ["id", "ticket", "user"]
-
-    def validate(self, attrs):
-        request = self.context.get("request")
-
-        _resolve_foreign_key(
-            attrs=attrs,
-            initial_data=self.initial_data,
-            instance=self.instance,
-            field_name="ticket",
-            id_keys=["ticket_id", "ticket"],
-            model_class=Ticket,
-            required_on_create=True,
-            select_related=("event",),
-        )
-
-        _resolve_foreign_key(
-            attrs=attrs,
-            initial_data=self.initial_data,
-            instance=self.instance,
-            field_name="user",
-            id_keys=["user_id", "user"],
-            model_class=User,
-            default_fn=lambda: request.user if request and request.user and request.user.is_authenticated else None,
-            required_on_create=True,
-            label="User",
-        )
-        return attrs
-
-    def to_representation(self, instance):
-        ret = super().to_representation(instance)
-        ret["id"] = str(instance.id)
-        ret["ticket"] = str(instance.ticket_id)
-        ret["ticket_id"] = str(instance.ticket_id)
-        ret["user"] = str(instance.user_id)
-        ret["user_id"] = str(instance.user_id)
-        return ret
 
 
 class PaymentSerializer(serializers.ModelSerializer):
