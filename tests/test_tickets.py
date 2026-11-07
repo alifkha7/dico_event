@@ -5,7 +5,14 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework import status
 
-from api.models import Event, Ticket
+from apps.core.mixins import PartialUpdateMixin
+from apps.core.permissions import RoleOwnershipPermission
+from apps.core.serializers import DualKeyModelSerializer
+from apps.events.models import Event
+from apps.tickets.models import Ticket
+from apps.tickets.permissions import TicketViewSetPermission
+from apps.tickets.serializers import TicketSerializer
+from apps.tickets.views import TicketViewSet
 
 User = get_user_model()
 
@@ -53,7 +60,21 @@ def sample_ticket(sample_event):
 
 
 # ==========================================
-# 1. Ticket Creation & RBAC Permissions (POST)
+# 1. Direct Imports and Domain Architectural Integrity
+# ==========================================
+
+
+def test_tickets_app_direct_imports():
+    """Verify Ticket model and TicketViewSet are configured under apps.tickets with canonical seams."""
+    assert Ticket._meta.app_label == "tickets"
+    assert Ticket._meta.db_table == "tickets"
+    assert issubclass(TicketSerializer, DualKeyModelSerializer)
+    assert issubclass(TicketViewSetPermission, RoleOwnershipPermission)
+    assert issubclass(TicketViewSet, PartialUpdateMixin)
+
+
+# ==========================================
+# 2. Ticket Creation & RBAC Permissions (POST)
 # ==========================================
 
 
@@ -132,8 +153,82 @@ def test_create_ticket_unauthenticated(api_client, sample_ticket_data):
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
+@pytest.mark.django_db
+def test_create_ticket_organizer_other_event_forbidden(
+    api_client, organizer_group, organizer_user, get_auth_header, sample_ticket_data
+):
+    """Verify Organizer cannot create a ticket for another Organizer's event (403 Forbidden)."""
+    other_organizer = User.objects.create_user(
+        username="other_event_host", email="other_host@dicoevent.com", password="password123"
+    )
+    other_organizer.groups.add(organizer_group)
+    now = datetime.now(timezone.utc)
+    other_event = Event.objects.create(
+        name="Other Host Event",
+        description="Not mine",
+        location="Bandung",
+        start_time=now + timedelta(days=5),
+        end_time=now + timedelta(days=6),
+        status="published",
+        quota=100,
+        category="Tech",
+        organizer=other_organizer,
+    )
+    headers = get_auth_header(organizer_user)
+    payload = sample_ticket_data.copy()
+    payload["event_id"] = str(other_event.id)
+    response = api_client.post("/api/tickets/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
 # ==========================================
-# 2. Ticket Listing (GET /api/tickets/)
+# 3. Domain Invariant Validation Tests
+# ==========================================
+
+
+@pytest.mark.django_db
+def test_create_ticket_negative_price_rejected(api_client, organizer_user, get_auth_header, sample_ticket_data):
+    """Verify ticket creation with negative price is rejected (400 Bad Request)."""
+    headers = get_auth_header(organizer_user)
+    payload = sample_ticket_data.copy()
+    payload["price"] = -5000
+    response = api_client.post("/api/tickets/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "price" in response.data
+
+
+@pytest.mark.django_db
+def test_create_ticket_non_positive_quota_rejected(api_client, organizer_user, get_auth_header, sample_ticket_data):
+    """Verify ticket creation with zero or negative quota is rejected (400 Bad Request)."""
+    headers = get_auth_header(organizer_user)
+    payload = sample_ticket_data.copy()
+    payload["quota"] = 0
+    response = api_client.post("/api/tickets/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "quota" in response.data
+
+    payload["quota"] = -10
+    response2 = api_client.post("/api/tickets/", payload, format="json", **headers)
+    assert response2.status_code == status.HTTP_400_BAD_REQUEST
+    assert "quota" in response2.data
+
+
+@pytest.mark.django_db
+def test_create_ticket_sales_end_before_sales_start_rejected(
+    api_client, organizer_user, get_auth_header, sample_ticket_data
+):
+    """Verify ticket creation where sales_end <= sales_start is rejected (400 Bad Request)."""
+    headers = get_auth_header(organizer_user)
+    now = datetime.now(timezone.utc)
+    payload = sample_ticket_data.copy()
+    payload["sales_start"] = (now + timedelta(days=4)).isoformat()
+    payload["sales_end"] = now.isoformat()
+    response = api_client.post("/api/tickets/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# ==========================================
+# 4. Ticket Listing (GET /api/tickets/)
 # ==========================================
 
 
@@ -156,7 +251,7 @@ def test_list_tickets_no_trailing_slash(api_client, sample_ticket):
 
 
 # ==========================================
-# 3. Ticket Retrieval (GET /api/tickets/<id>/)
+# 5. Ticket Retrieval (GET /api/tickets/<id>/)
 # ==========================================
 
 
@@ -190,7 +285,7 @@ def test_retrieve_ticket_not_found(api_client):
 
 
 # ==========================================
-# 4. Ticket Update (PUT /api/tickets/<id>/)
+# 6. Ticket Update (PUT /api/tickets/<id>/)
 # ==========================================
 
 
@@ -232,6 +327,34 @@ def test_update_ticket_organizer_other_event_forbidden(api_client, organizer_gro
 
 
 @pytest.mark.django_db
+def test_update_ticket_organizer_change_to_other_event_forbidden(
+    api_client, organizer_group, organizer_user, get_auth_header, sample_ticket
+):
+    """Verify Organizer cannot change ticket to point to another Organizer's event (403 Forbidden)."""
+    other_organizer = User.objects.create_user(
+        username="other_org_target", email="other_target@dicoevent.com", password="password123"
+    )
+    other_organizer.groups.add(organizer_group)
+    now = datetime.now(timezone.utc)
+    other_event = Event.objects.create(
+        name="Target Event",
+        description="Not mine",
+        location="Surabaya",
+        start_time=now + timedelta(days=5),
+        end_time=now + timedelta(days=6),
+        status="published",
+        quota=50,
+        category="Tech",
+        organizer=other_organizer,
+    )
+    headers = get_auth_header(organizer_user)
+    response = api_client.put(
+        f"/api/tickets/{sample_ticket.id}/", {"event_id": str(other_event.id)}, format="json", **headers
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_update_ticket_regular_user_forbidden(api_client, regular_user, get_auth_header, sample_ticket):
     """Verify regular User cannot update ticket (403 Forbidden)."""
     headers = get_auth_header(regular_user)
@@ -240,7 +363,7 @@ def test_update_ticket_regular_user_forbidden(api_client, regular_user, get_auth
 
 
 # ==========================================
-# 5. Ticket Deletion (DELETE /api/tickets/<id>/)
+# 7. Ticket Deletion (DELETE /api/tickets/<id>/)
 # ==========================================
 
 

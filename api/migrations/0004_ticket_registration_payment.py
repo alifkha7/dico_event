@@ -1,8 +1,8 @@
 import uuid
 
+import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
-import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
@@ -10,42 +10,11 @@ class Migration(migrations.Migration):
     dependencies = [
         ("events", "0001_initial"),
         ("users", "0001_initial"),
+        ("tickets", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
-        migrations.CreateModel(
-            name="Ticket",
-            fields=[
-                (
-                    "id",
-                    models.UUIDField(
-                        default=uuid.uuid4,
-                        editable=False,
-                        primary_key=True,
-                        serialize=False,
-                    ),
-                ),
-                ("name", models.CharField(max_length=255)),
-                ("price", models.IntegerField()),
-                ("sales_start", models.DateTimeField()),
-                ("sales_end", models.DateTimeField()),
-                ("quota", models.IntegerField()),
-                (
-                    "event",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="tickets",
-                        to="events.event",
-                    ),
-                ),
-            ],
-            options={
-                "verbose_name": "Ticket",
-                "verbose_name_plural": "Tickets",
-                "db_table": "tickets",
-            },
-        ),
         migrations.CreateModel(
             name="Registration",
             fields=[
@@ -63,7 +32,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="registrations",
-                        to="api.ticket",
+                        to="tickets.ticket",
                     ),
                 ),
                 (

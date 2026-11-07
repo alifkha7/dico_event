@@ -14,5 +14,6 @@ urlpatterns = [
     re_path(r"^redoc/?$", SpectacularRedocView.as_view(url_name="schema", permission_classes=[AllowAny]), name="redoc"),
     re_path(r"^", include("apps.users.urls")),
     re_path(r"^", include("apps.events.urls")),
+    re_path(r"^", include("apps.tickets.urls")),
     re_path(r"^", include("api.urls")),
 ]
