@@ -4,7 +4,7 @@
 
 **Blocked by:** 04: Deepened Registrations & Reminder Lifecycle Application (`registrations`)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The `payments` application is registered in Django's installed applications under the `payments` label and owns the **Payment** model (`db_table = "payments"`, cascading delete from **Registration**) and its initial migration.
 - [ ] `PaymentSerializer` inherits from `DualKeyModelSerializer` to resolve `registration` / `registration_id` (with `select_related("user")`), enforces positive `amount_paid`, and normalizes case-insensitive `"completed"` to `"Completed"` (ADR-0001).
