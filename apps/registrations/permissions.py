@@ -17,6 +17,16 @@ class RegistrationViewSetPermission(RoleOwnershipPermission):
     admin_only_actions = ("list",)
     owner_field = "user_id"
 
+    def _check_payload_user_ownership(self, request) -> bool:
+        if not hasattr(request, "data"):
+            return True
+        target_user = request.data.get("user_id") or request.data.get("user")
+        if target_user:
+            target_user_id = getattr(target_user, "id", target_user)
+            if str(target_user_id) != str(request.user.id):
+                return False
+        return True
+
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
@@ -26,13 +36,8 @@ class RegistrationViewSetPermission(RoleOwnershipPermission):
 
         action = getattr(view, "action", None)
         if action == "create":
-            target_user = None
-            if hasattr(request, "data"):
-                target_user = request.data.get("user_id") or request.data.get("user")
-            if target_user:
-                target_user_id = getattr(target_user, "id", target_user)
-                if str(target_user_id) != str(request.user.id):
-                    return False
+            if not self._check_payload_user_ownership(request):
+                return False
 
         return True
 
@@ -45,12 +50,7 @@ class RegistrationViewSetPermission(RoleOwnershipPermission):
 
         action = getattr(view, "action", None)
         if action in ["update", "partial_update"]:
-            target_user = None
-            if hasattr(request, "data"):
-                target_user = request.data.get("user_id") or request.data.get("user")
-            if target_user:
-                target_user_id = getattr(target_user, "id", target_user)
-                if str(target_user_id) != str(request.user.id):
-                    return False
+            if not self._check_payload_user_ownership(request):
+                return False
 
         return True

@@ -1,9 +1,9 @@
 from django.contrib.auth import get_user_model
-from PIL import Image
 from rest_framework import serializers
 
 from apps.core.serializers import DualKeyModelSerializer
 from apps.events.models import Event, EventPoster
+from apps.events.storage import validate_poster_image
 
 User = get_user_model()
 
@@ -119,23 +119,4 @@ class EventPosterUploadSerializer(serializers.Serializer):
             raise serializers.ValidationError("Event not found.")
 
     def validate_image(self, value):
-        # 1. Size limit: 500 KB = 500 * 1024 = 512,000 bytes per Coding Standard #1
-        max_size = 500 * 1024
-        if value.size > max_size:
-            raise serializers.ValidationError(f"File size exceeds the 500 KB limit ({value.size} bytes).")
-
-        # 2. Content-type check
-        content_type = getattr(value, "content_type", "")
-        if not content_type or not content_type.startswith("image/"):
-            raise serializers.ValidationError("File must have an image/* MIME type.")
-
-        # 3. Verification using Pillow
-        try:
-            img = Image.open(value)
-            img.verify()
-            if hasattr(value, "seek"):
-                value.seek(0)
-        except Exception:
-            raise serializers.ValidationError("Uploaded file is not a valid image.")
-
-        return value
+        return validate_poster_image(value)

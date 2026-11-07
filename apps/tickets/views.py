@@ -17,9 +17,7 @@ __all__ = ["TicketViewSet"]
         description="List all Tickets wrapped in a tickets envelope with constant O(1) query eager-loading."
     ),
     retrieve=extend_schema(description="Retrieve Ticket details by ID (unauthenticated public access per ADR-0001)."),
-    create=extend_schema(
-        description="Create an admission tier Ticket for an Event with non-negative price and positive quota."
-    ),
+    create=extend_schema(description="Create a Ticket for an Event with non-negative price and positive quota."),
     update=extend_schema(description="Update Ticket details for an Event owned by the Organizer, Superuser, or Admin."),
     partial_update=extend_schema(
         description="Partially update Ticket details for an Event owned by the Organizer, Superuser, or Admin."

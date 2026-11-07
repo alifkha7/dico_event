@@ -10,7 +10,7 @@ __all__ = ["TicketSerializer"]
 
 class TicketSerializer(DualKeyModelSerializer):
     """
-    Ticket serializer enforcing domain admission tier rules:
+    Ticket serializer enforcing domain Ticket rules:
     - Dual-key event / event_id resolution with caller-supplied eager-loading hints
     - Non-negative price (>= 0)
     - Positive quota (> 0)

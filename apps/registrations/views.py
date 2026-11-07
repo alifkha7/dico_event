@@ -24,7 +24,7 @@ __all__ = ["RegistrationViewSet"]
     ),
     create=extend_schema(
         description=(
-            "Create a Registration booking an admission tier Ticket for a User and automatically "
+            "Create a Registration for a Ticket for a User and automatically "
             "schedule a 2-hour pre-Event reminder notification."
         )
     ),
@@ -36,7 +36,7 @@ __all__ = ["RegistrationViewSet"]
 )
 class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     """
-    Registration ViewSet managing attendee booking lifecycles and automated reminders:
+    Registration ViewSet managing User Registration lifecycles and automated reminders:
     - Eager-loading ticket, ticket__event, and user for constant O(1) query performance
     - Delegation of 2-hour pre-Event reminder scheduling to RegistrationSerializer.create
     - Declarative User ownership and ADR-0001 unauthenticated detail retrieve permissions

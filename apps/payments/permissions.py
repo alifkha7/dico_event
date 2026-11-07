@@ -18,6 +18,20 @@ class PaymentViewSetPermission(RoleOwnershipPermission):
     admin_only_actions = ("list",)
     owner_field = "registration__user_id"
 
+    def _check_payload_registration_ownership(self, request) -> bool:
+        if not hasattr(request, "data"):
+            return True
+        target_reg = request.data.get("registration_id") or request.data.get("registration")
+        if target_reg:
+            target_reg_id = getattr(target_reg, "id", target_reg)
+            try:
+                reg = Registration.objects.select_related("user").get(id=target_reg_id)
+                if str(reg.user_id) != str(request.user.id):
+                    return False
+            except (Registration.DoesNotExist, ValueError):
+                pass
+        return True
+
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
@@ -27,17 +41,8 @@ class PaymentViewSetPermission(RoleOwnershipPermission):
 
         action = getattr(view, "action", None)
         if action == "create":
-            target_reg = None
-            if hasattr(request, "data"):
-                target_reg = request.data.get("registration_id") or request.data.get("registration")
-            if target_reg:
-                target_reg_id = getattr(target_reg, "id", target_reg)
-                try:
-                    reg = Registration.objects.select_related("user").get(id=target_reg_id)
-                    if str(reg.user_id) != str(request.user.id):
-                        return False
-                except (Registration.DoesNotExist, ValueError):
-                    pass
+            if not self._check_payload_registration_ownership(request):
+                return False
 
         return True
 
@@ -50,16 +55,7 @@ class PaymentViewSetPermission(RoleOwnershipPermission):
 
         action = getattr(view, "action", None)
         if action in ["update", "partial_update"]:
-            target_reg = None
-            if hasattr(request, "data"):
-                target_reg = request.data.get("registration_id") or request.data.get("registration")
-            if target_reg:
-                target_reg_id = getattr(target_reg, "id", target_reg)
-                try:
-                    reg = Registration.objects.select_related("user").get(id=target_reg_id)
-                    if str(reg.user_id) != str(request.user.id):
-                        return False
-                except (Registration.DoesNotExist, ValueError):
-                    pass
+            if not self._check_payload_registration_ownership(request):
+                return False
 
         return True

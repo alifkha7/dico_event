@@ -446,3 +446,25 @@ def test_attach_event_poster_non_owner_forbidden(sample_event, organizer_group, 
             attach_event_poster(sample_event, image, regular_user)
         assert "You do not have permission to upload a poster for this event." in str(exc2.value)
         mock_upload.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_attach_event_poster_oversized_and_corrupt_rejected(sample_event, organizer_user):
+    """Verify calling attach_event_poster directly with oversized or corrupt file raises ValidationError."""
+    from rest_framework.serializers import ValidationError
+
+    # 1. Oversized (>500 KB)
+    large_image = create_oversized_test_image()
+    with patch("apps.events.storage.upload_poster_to_minio") as mock_upload:
+        with pytest.raises(ValidationError) as exc1:
+            attach_event_poster(sample_event, large_image, organizer_user)
+        assert "File size exceeds the 500 KB limit" in str(exc1.value)
+        mock_upload.assert_not_called()
+
+    # 2. Corrupt / non-image
+    corrupt_image = SimpleUploadedFile("corrupt.png", b"corrupted non image bytes", content_type="image/png")
+    with patch("apps.events.storage.upload_poster_to_minio") as mock_upload:
+        with pytest.raises(ValidationError) as exc2:
+            attach_event_poster(sample_event, corrupt_image, organizer_user)
+        assert "Uploaded file is not a valid image." in str(exc2.value)
+        mock_upload.assert_not_called()
