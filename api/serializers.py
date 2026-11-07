@@ -2,12 +2,12 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.core.serializers import DualKeyModelSerializer, _resolve_foreign_key
-from apps.events.models import Event
 from apps.events.serializers import (
     EventPosterSerializer,
     EventPosterUploadSerializer,
     EventSerializer,
 )
+from apps.tickets.serializers import TicketSerializer
 from apps.users.serializers import (
     AssignRoleSerializer,
     CustomTokenObtainPairSerializer,
@@ -33,55 +33,6 @@ __all__ = [
     "UserSerializer",
     "_resolve_foreign_key",
 ]
-
-
-class TicketSerializer(serializers.ModelSerializer):
-    id = serializers.UUIDField(read_only=True)
-    price = serializers.IntegerField(required=False)
-    quota = serializers.IntegerField(required=False)
-    event_id = serializers.CharField(required=False, write_only=False)
-
-    class Meta:
-        model = Ticket
-        fields = [
-            "id",
-            "event",
-            "event_id",
-            "name",
-            "price",
-            "sales_start",
-            "sales_end",
-            "quota",
-        ]
-        read_only_fields = ["id", "event"]
-
-    def validate(self, attrs):
-        if self.instance is None:
-            required_fields = ["name", "price", "sales_start", "sales_end", "quota"]
-            missing = [f for f in required_fields if f not in attrs and f not in self.initial_data]
-            if missing:
-                raise serializers.ValidationError({f: "This field is required." for f in missing})
-
-        _resolve_foreign_key(
-            attrs=attrs,
-            initial_data=self.initial_data,
-            instance=self.instance,
-            field_name="event",
-            id_keys=["event_id", "event"],
-            model_class=Event,
-            required_on_create=True,
-        )
-        return attrs
-
-    def to_representation(self, instance):
-        ret = super().to_representation(instance)
-        ret["id"] = str(instance.id)
-        ret["event"] = str(instance.event_id)
-        ret["event_id"] = str(instance.event_id)
-        ret["name"] = str(instance.name)
-        ret["price"] = int(instance.price)
-        ret["quota"] = int(instance.quota)
-        return ret
 
 
 class RegistrationSerializer(serializers.ModelSerializer):

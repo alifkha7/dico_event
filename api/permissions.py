@@ -15,6 +15,7 @@ from apps.events.permissions import (
     EventPosterUploadPermission,
     EventViewSetPermission,
 )
+from apps.tickets.permissions import TicketViewSetPermission
 from apps.users.permissions import UserViewSetPermission
 
 __all__ = [
@@ -34,35 +35,6 @@ __all__ = [
     "is_admin_user",
     "is_organizer_user",
 ]
-
-
-class TicketViewSetPermission(permissions.BasePermission):
-    """
-    Permission logic for TicketViewSet:
-    - GET (list): AllowAny
-    - GET (retrieve): AllowAny per ADR-0001
-    - POST (create): Authenticated Superuser, Admin, or Organizer
-    - PUT / PATCH (update): Superuser, Admin, or Organizer who owns the event
-    - DELETE (destroy): Superuser, Admin, or Organizer who owns the event
-    """
-
-    def has_permission(self, request, view):
-        if view.action in ["list", "retrieve"]:
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        return can_create_or_manage_events(request.user)
-
-    def has_object_permission(self, request, view, obj):
-        if view.action == "retrieve":
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if is_admin_user(request.user):
-            return True
-        if is_organizer_user(request.user):
-            return str(obj.event.organizer_id) == str(request.user.id)
-        return False
 
 
 class RegistrationViewSetPermission(permissions.BasePermission):

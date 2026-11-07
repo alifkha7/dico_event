@@ -81,15 +81,17 @@ def test_settings_redis_cache_configuration(monkeypatch):
 
 
 def test_core_and_users_apps_configured():
-    """Verify core and users applications are installed and configured with canonical labels."""
+    """Verify core, users, events, and tickets applications are installed and configured with canonical labels."""
     from django.apps import apps
     from django.conf import settings
 
     assert "apps.core" in settings.INSTALLED_APPS or "apps.core.apps.CoreConfig" in settings.INSTALLED_APPS
     assert "apps.users" in settings.INSTALLED_APPS or "apps.users.apps.UsersConfig" in settings.INSTALLED_APPS
-    assert apps.get_app_config("core").label == "core"
     assert "apps.events" in settings.INSTALLED_APPS or "apps.events.apps.EventsConfig" in settings.INSTALLED_APPS
+    assert "apps.tickets" in settings.INSTALLED_APPS or "apps.tickets.apps.TicketsConfig" in settings.INSTALLED_APPS
+    assert apps.get_app_config("core").label == "core"
     assert apps.get_app_config("users").label == "users"
     assert apps.get_app_config("events").label == "events"
+    assert apps.get_app_config("tickets").label == "tickets"
     assert settings.AUTH_USER_MODEL == "users.User"
     assert settings.REST_FRAMEWORK.get("EXCEPTION_HANDLER") == "apps.core.exceptions.custom_exception_handler"

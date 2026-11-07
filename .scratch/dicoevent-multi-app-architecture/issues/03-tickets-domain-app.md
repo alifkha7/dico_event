@@ -4,9 +4,9 @@
 
 **Blocked by:** 02: Deepened Events & Event Posters Domain Application (`events`)
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] The `tickets` application is registered in Django's installed applications under the `tickets` label and owns the **Ticket** model (`db_table = "tickets"`, cascading delete from **Event**) and its initial migration.
-- [ ] `TicketSerializer` inherits from `DualKeyModelSerializer` to resolve `event` / `event_id` with caller-supplied eager-loading hints and enforces non-negative `price`, positive `quota`, and `sales_start < sales_end`.
-- [ ] `TicketViewSet` configures `select_related("event", "event__organizer")`, uses `PartialUpdateMixin` and the declarative permission policy (**Admin**/**Superuser** full access, **Organizer** ownership via `event.organizer_id` on create/update/destroy, and ADR-0001 unauthenticated detail `retrieve`), and mounts `/api/tickets` routes via the `core` URL aggregator.
-- [ ] The **Ticket** test suite is updated to import from the `tickets` application, and the entire test suite and `ruff` checks pass.
+- [x] The `tickets` application is registered in Django's installed applications under the `tickets` label and owns the **Ticket** model (`db_table = "tickets"`, cascading delete from **Event**) and its initial migration.
+- [x] `TicketSerializer` inherits from `DualKeyModelSerializer` to resolve `event` / `event_id` with caller-supplied eager-loading hints and enforces non-negative `price`, positive `quota`, and `sales_start < sales_end`.
+- [x] `TicketViewSet` configures `select_related("event", "event__organizer")`, uses `PartialUpdateMixin` and the declarative permission policy (**Admin**/**Superuser** full access, **Organizer** ownership via `event.organizer_id` on create/update/destroy, and ADR-0001 unauthenticated detail `retrieve`), and mounts `/api/tickets` routes via the `core` URL aggregator.
+- [x] The **Ticket** test suite is updated to import from the `tickets` application, and the entire test suite and `ruff` checks pass.
