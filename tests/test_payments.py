@@ -5,9 +5,39 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework import status
 
-from api.models import Event, Payment, Registration, Ticket
+from apps.core.mixins import PartialUpdateMixin
+from apps.core.permissions import RoleOwnershipPermission
+from apps.core.serializers import DualKeyModelSerializer
+from apps.events.models import Event
+from apps.payments.models import Payment
+from apps.payments.permissions import PaymentViewSetPermission
+from apps.payments.serializers import PaymentSerializer
+from apps.payments.views import PaymentViewSet
+from apps.registrations.models import Registration
+from apps.tickets.models import Ticket
 
 User = get_user_model()
+
+
+# ==========================================
+# 0. Direct Imports and Domain Architectural Integrity
+# ==========================================
+
+
+def test_payments_app_direct_imports():
+    """Verify Payment model, serializer, viewset, and permission are configured under apps.payments."""
+    assert Payment._meta.app_label == "payments"
+    assert Payment._meta.db_table == "payments"
+    assert issubclass(PaymentSerializer, DualKeyModelSerializer)
+    assert issubclass(PaymentViewSetPermission, RoleOwnershipPermission)
+    assert issubclass(PaymentViewSet, PartialUpdateMixin)
+
+
+@pytest.mark.django_db
+def test_payment_model_user_property_shortcuts(sample_payment, regular_user):
+    """Verify Payment model provides .user and .user_id property shortcuts to registration.user."""
+    assert sample_payment.user == regular_user
+    assert sample_payment.user_id == regular_user.id
 
 
 @pytest.fixture
@@ -121,6 +151,29 @@ def test_create_payment_unauthenticated(api_client, sample_payment_data):
     """Verify unauthenticated user cannot create payment (401 Unauthorized)."""
     response = api_client.post("/api/payments/", sample_payment_data, format="json")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invalid_amount", [0, -100, -50000])
+def test_create_payment_invalid_amount_paid_rejected(
+    api_client, regular_user, get_auth_header, sample_payment_data, invalid_amount
+):
+    """Verify payment creation rejects non-positive amount_paid values (400 Bad Request)."""
+    headers = get_auth_header(regular_user)
+    payload = {**sample_payment_data, "amount_paid": invalid_amount}
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "amount_paid" in response.data
+
+
+@pytest.mark.django_db
+def test_create_payment_other_user_registration_forbidden(
+    api_client, another_regular_user, get_auth_header, sample_payment_data
+):
+    """Verify non-admin User cannot create payment for another User's registration (403 Forbidden)."""
+    headers = get_auth_header(another_regular_user)
+    response = api_client.post("/api/payments/", sample_payment_data, format="json", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 # ==========================================
@@ -238,6 +291,21 @@ def test_update_payment_non_owner_forbidden(api_client, another_regular_user, ge
     """Verify non-owner User cannot update payment (403 Forbidden)."""
     headers = get_auth_header(another_regular_user)
     payload = {"payment_status": "completed"}
+    response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_update_payment_reassign_to_other_user_registration_forbidden(
+    api_client, regular_user, get_auth_header, sample_payment, sample_ticket, another_regular_user
+):
+    """Verify non-admin User cannot reassign payment to another User's registration (403 Forbidden)."""
+    other_registration = Registration.objects.create(
+        ticket=sample_ticket,
+        user=another_regular_user,
+    )
+    headers = get_auth_header(regular_user)
+    payload = {"registration_id": str(other_registration.id)}
     response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
     assert response.status_code == status.HTTP_403_FORBIDDEN
 

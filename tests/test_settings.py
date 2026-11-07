@@ -81,7 +81,9 @@ def test_settings_redis_cache_configuration(monkeypatch):
 
 
 def test_core_and_users_apps_configured():
-    """Verify core, users, events, tickets, and registrations apps are installed with canonical labels."""
+    """Verify all domain apps are installed with canonical labels and legacy api app is completely removed."""
+    import os
+
     from django.apps import apps
     from django.conf import settings
 
@@ -93,10 +95,21 @@ def test_core_and_users_apps_configured():
         "apps.registrations" in settings.INSTALLED_APPS
         or "apps.registrations.apps.RegistrationsConfig" in settings.INSTALLED_APPS
     )
+    assert "apps.payments" in settings.INSTALLED_APPS or "apps.payments.apps.PaymentsConfig" in settings.INSTALLED_APPS
+
+    assert "api" not in settings.INSTALLED_APPS
+    assert "api.apps.ApiConfig" not in settings.INSTALLED_APPS
+
     assert apps.get_app_config("core").label == "core"
     assert apps.get_app_config("users").label == "users"
     assert apps.get_app_config("events").label == "events"
     assert apps.get_app_config("tickets").label == "tickets"
     assert apps.get_app_config("registrations").label == "registrations"
+    assert apps.get_app_config("payments").label == "payments"
     assert settings.AUTH_USER_MODEL == "users.User"
     assert settings.REST_FRAMEWORK.get("EXCEPTION_HANDLER") == "apps.core.exceptions.custom_exception_handler"
+
+    # Verify api directory is completely removed
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    api_dir = os.path.join(root_dir, "api")
+    assert not os.path.exists(api_dir), f"Legacy monolith directory still exists at {api_dir}"

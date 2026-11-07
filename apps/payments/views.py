@@ -1,73 +1,49 @@
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from loguru import logger
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 
 from apps.core.mixins import PartialUpdateMixin
-from apps.events.views import (
-    EventFilter,
-    EventPagination,
-    EventPostersListView,
-    EventPosterUploadView,
-    EventSetPagination,
-    EventViewSet,
-)
-from apps.registrations.views import RegistrationViewSet
-from apps.tickets.views import TicketViewSet
-from apps.users.serializers import (
-    AssignRoleSerializer,
-    GroupSerializer,
-    UserSerializer,
-)
-from apps.users.views import (
-    AssignRoleView,
-    CustomTokenObtainPairView,
-    CustomTokenRefreshView,
-    GroupViewSet,
-    UserViewSet,
-)
 
 from .models import Payment
-from .permissions import (
-    PaymentViewSetPermission,
+from .permissions import PaymentViewSetPermission
+from .serializers import PaymentSerializer
+
+__all__ = ["PaymentViewSet"]
+
+
+@extend_schema_view(
+    list=extend_schema(
+        description=(
+            "List all Payments wrapped in a payments envelope with constant O(1) query "
+            "eager-loading (Admin and Superuser only)."
+        )
+    ),
+    retrieve=extend_schema(description="Retrieve Payment details by ID (unauthenticated public access per ADR-0001)."),
+    create=extend_schema(
+        description=("Create a Payment settlement for a Registration by an authenticated User, Admin, or Superuser.")
+    ),
+    update=extend_schema(
+        description=(
+            "Update Payment details with case-insensitive 'completed' status normalized to 'Completed' (ADR-0001)."
+        )
+    ),
+    partial_update=extend_schema(
+        description=(
+            "Partially update Payment details with case-insensitive 'completed' "
+            "status normalized to 'Completed' (ADR-0001)."
+        )
+    ),
+    destroy=extend_schema(description="Delete a Payment owned by the User, Superuser, or Admin."),
 )
-from .serializers import (
-    EventPosterSerializer,
-    EventPosterUploadSerializer,
-    EventSerializer,
-    PaymentSerializer,
-    RegistrationSerializer,
-    TicketSerializer,
-)
-
-__all__ = [
-    "AssignRoleSerializer",
-    "AssignRoleView",
-    "CustomTokenObtainPairView",
-    "CustomTokenRefreshView",
-    "EventFilter",
-    "EventPagination",
-    "EventPosterSerializer",
-    "EventPosterUploadSerializer",
-    "EventPosterUploadView",
-    "EventPostersListView",
-    "EventSerializer",
-    "EventSetPagination",
-    "EventViewSet",
-    "GroupSerializer",
-    "GroupViewSet",
-    "PartialUpdateMixin",
-    "PaymentSerializer",
-    "PaymentViewSet",
-    "RegistrationSerializer",
-    "RegistrationViewSet",
-    "TicketSerializer",
-    "TicketViewSet",
-    "UserSerializer",
-    "UserViewSet",
-]
-
-
 class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
+    """
+    Payment ViewSet managing financial settlements and status normalization:
+    - Eager-loading registration and registration__user for constant O(1) query performance
+    - Normalization of case-insensitive 'completed' to 'Completed' (ADR-0001)
+    - Declarative User ownership and ADR-0001 unauthenticated detail retrieve permissions
+    """
+
     queryset = Payment.objects.select_related("registration", "registration__user").all().order_by("id")
     serializer_class = PaymentSerializer
     permission_classes = [PaymentViewSetPermission]

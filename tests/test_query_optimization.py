@@ -9,7 +9,10 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 
-from api.models import Event, Payment, Registration, Ticket
+from apps.events.models import Event
+from apps.payments.models import Payment
+from apps.registrations.models import Registration
+from apps.tickets.models import Ticket
 
 User = get_user_model()
 
@@ -42,13 +45,11 @@ def _has_select_related(queryset, lookup: str) -> bool:
 
 def test_viewsets_querysets_configured_with_eager_loading():
     """Verify each ModelViewSet explicitly defines eager-loading on its queryset per spec."""
-    from api.views import (
-        EventViewSet,
-        PaymentViewSet,
-        RegistrationViewSet,
-        TicketViewSet,
-        UserViewSet,
-    )
+    from apps.events.views import EventViewSet
+    from apps.payments.views import PaymentViewSet
+    from apps.registrations.views import RegistrationViewSet
+    from apps.tickets.views import TicketViewSet
+    from apps.users.views import UserViewSet
 
     # UserViewSet: prefetch_related('groups')
     assert "groups" in UserViewSet.queryset._prefetch_related_lookups, "UserViewSet missing prefetch_related('groups')"
@@ -450,7 +451,7 @@ def test_registration_creation_reminder_query_efficiency(api_client, regular_use
 
     payload = {"ticket_id": str(ticket.id)}
     with (
-        patch("api.tasks.send_event_reminder_email.apply_async") as mock_apply_async,
+        patch("apps.registrations.tasks.send_event_reminder_email.apply_async") as mock_apply_async,
         CaptureQueriesContext(connection) as ctx,
     ):
         res = api_client.post("/api/registrations/", payload, format="json", **headers)

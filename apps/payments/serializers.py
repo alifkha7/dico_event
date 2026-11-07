@@ -1,42 +1,33 @@
 from rest_framework import serializers
 
-from apps.core.serializers import DualKeyModelSerializer, _resolve_foreign_key
-from apps.events.serializers import (
-    EventPosterSerializer,
-    EventPosterUploadSerializer,
-    EventSerializer,
-)
-from apps.registrations.serializers import RegistrationSerializer
-from apps.tickets.serializers import TicketSerializer
-from apps.users.serializers import (
-    AssignRoleSerializer,
-    CustomTokenObtainPairSerializer,
-    GroupSerializer,
-    UserSerializer,
-)
+from apps.core.serializers import DualKeyModelSerializer
+from apps.registrations.models import Registration
 
-from .models import Payment, Registration
+from .models import Payment
 
-__all__ = [
-    "AssignRoleSerializer",
-    "CustomTokenObtainPairSerializer",
-    "DualKeyModelSerializer",
-    "EventPosterSerializer",
-    "EventPosterUploadSerializer",
-    "EventSerializer",
-    "GroupSerializer",
-    "PaymentSerializer",
-    "RegistrationSerializer",
-    "TicketSerializer",
-    "UserSerializer",
-    "_resolve_foreign_key",
-]
+__all__ = ["PaymentSerializer"]
 
 
-class PaymentSerializer(serializers.ModelSerializer):
+class PaymentSerializer(DualKeyModelSerializer):
+    """
+    Payment serializer enforcing domain payment rules:
+    - Dual-key registration / registration_id resolution with Registration.objects.select_related("user")
+    - Positive amount_paid (> 0)
+    - ADR-0001 case-insensitive 'completed' status normalization to 'Completed'
+    """
+
     id = serializers.UUIDField(read_only=True)
     registration_id = serializers.CharField(required=False, write_only=False)
     amount_paid = serializers.IntegerField(required=False)
+
+    dual_key_fields = {
+        "registration": {
+            "queryset": Registration.objects.select_related("user"),
+            "id_keys": ("registration_id", "registration"),
+            "required_on_create": True,
+            "label": "Registration",
+        }
+    }
 
     class Meta:
         model = Payment
@@ -57,23 +48,17 @@ class PaymentSerializer(serializers.ModelSerializer):
             if missing:
                 raise serializers.ValidationError({f: "This field is required." for f in missing})
 
-        _resolve_foreign_key(
-            attrs=attrs,
-            initial_data=self.initial_data,
-            instance=self.instance,
-            field_name="registration",
-            id_keys=["registration_id", "registration"],
-            model_class=Registration,
-            required_on_create=True,
-            select_related=("user",),
-        )
+        if "amount_paid" in attrs and attrs["amount_paid"] <= 0:
+            raise serializers.ValidationError({"amount_paid": "Amount paid must be positive."})
 
         # ADR-0001: Normalize 'completed' (case-insensitive) to 'Completed'
-        status_val = attrs.get("payment_status") or self.initial_data.get("payment_status")
+        status_val = attrs.get("payment_status")
+        if status_val is None and self.initial_data:
+            status_val = self.initial_data.get("payment_status")
         if status_val is not None and str(status_val).strip().lower() == "completed":
             attrs["payment_status"] = "Completed"
 
-        return attrs
+        return super().validate(attrs)
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

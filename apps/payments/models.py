@@ -2,17 +2,9 @@ import uuid
 
 from django.db import models
 
-from apps.events.models import Event, EventPoster
 from apps.registrations.models import Registration
-from apps.tickets.models import Ticket
 
-__all__ = [
-    "Event",
-    "EventPoster",
-    "Payment",
-    "Registration",
-    "Ticket",
-]
+__all__ = ["Payment"]
 
 
 class Payment(models.Model):
@@ -26,6 +18,11 @@ class Payment(models.Model):
         db_table = "payments"
         verbose_name = "Payment"
         verbose_name_plural = "Payments"
+
+    @property
+    def user(self):
+        """Shortcut property to access the registrant's User instance."""
+        return self.registration.user
 
     @property
     def user_id(self):
