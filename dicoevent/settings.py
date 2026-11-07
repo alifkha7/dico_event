@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.tickets",
     "apps.registrations",
-    "api.apps.ApiConfig",
+    "apps.payments",
 ]
 
 MIDDLEWARE = [

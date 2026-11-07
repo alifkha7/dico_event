@@ -4,10 +4,10 @@
 
 **Blocked by:** 04: Deepened Registrations & Reminder Lifecycle Application (`registrations`)
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] The `payments` application is registered in Django's installed applications under the `payments` label and owns the **Payment** model (`db_table = "payments"`, cascading delete from **Registration**) and its initial migration.
-- [ ] `PaymentSerializer` inherits from `DualKeyModelSerializer` to resolve `registration` / `registration_id` (with `select_related("user")`), enforces positive `amount_paid`, and normalizes case-insensitive `"completed"` to `"Completed"` (ADR-0001).
-- [ ] `PaymentViewSet` configures `select_related("registration", "registration__user")`, uses `PartialUpdateMixin` and the declarative permission policy (**Admin**/**Superuser** full access, **User** ownership via `registration.user_id`, and ADR-0001 unauthenticated detail `retrieve`), and mounts `/api/payments` routes via the `core` URL aggregator.
-- [ ] The legacy monolithic `api` directory (including all legacy files and migrations) is completely removed from the repository, and zero imports from `api` remain anywhere in the codebase or test suite.
-- [ ] All cross-domain test suites (**Payment**, cascading deletes, `O(1)` query optimization, OpenAPI schema validation, Docker, CI, and `ruff` linting/formatting) are updated to reference the canonical `apps.*` modules and pass 100%.
+- [x] The `payments` application is registered in Django's installed applications under the `payments` label and owns the **Payment** model (`db_table = "payments"`, cascading delete from **Registration**) and its initial migration.
+- [x] `PaymentSerializer` inherits from `DualKeyModelSerializer` to resolve `registration` / `registration_id` (with `select_related("user")`), enforces positive `amount_paid`, and normalizes case-insensitive `"completed"` to `"Completed"` (ADR-0001).
+- [x] `PaymentViewSet` configures `select_related("registration", "registration__user")`, uses `PartialUpdateMixin` and the declarative permission policy (**Admin**/**Superuser** full access, **User** ownership via `registration.user_id`, and ADR-0001 unauthenticated detail `retrieve`), and mounts `/api/payments` routes via the `core` URL aggregator.
+- [x] The legacy monolithic `api` directory (including all legacy files and migrations) is completely removed from the repository, and zero imports from `api` remain anywhere in the codebase or test suite.
+- [x] All cross-domain test suites (**Payment**, cascading deletes, `O(1)` query optimization, OpenAPI schema validation, Docker, CI, and `ruff` linting/formatting) are updated to reference the canonical `apps.*` modules and pass 100%.

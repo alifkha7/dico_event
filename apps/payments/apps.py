@@ -1,6 +1,7 @@
 from django.apps import AppConfig
 
 
-class ApiConfig(AppConfig):
+class PaymentsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "api"
+    name = "apps.payments"
+    label = "payments"
