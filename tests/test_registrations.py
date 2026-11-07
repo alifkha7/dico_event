@@ -5,9 +5,31 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework import status
 
-from api.models import Event, Registration, Ticket
+from apps.core.mixins import PartialUpdateMixin
+from apps.core.permissions import RoleOwnershipPermission
+from apps.core.serializers import DualKeyModelSerializer
+from apps.events.models import Event
+from apps.registrations.models import Registration
+from apps.registrations.permissions import RegistrationViewSetPermission
+from apps.registrations.serializers import RegistrationSerializer
+from apps.registrations.views import RegistrationViewSet
+from apps.tickets.models import Ticket
 
 User = get_user_model()
+
+
+# ==========================================
+# 0. Direct Imports and Domain Architectural Integrity
+# ==========================================
+
+
+def test_registrations_app_direct_imports():
+    """Verify Registration model, serializer, viewset, and permission are configured under apps.registrations."""
+    assert Registration._meta.app_label == "registrations"
+    assert Registration._meta.db_table == "registrations"
+    assert issubclass(RegistrationSerializer, DualKeyModelSerializer)
+    assert issubclass(RegistrationViewSetPermission, RoleOwnershipPermission)
+    assert issubclass(RegistrationViewSet, PartialUpdateMixin)
 
 
 @pytest.fixture
@@ -252,3 +274,64 @@ def test_delete_registration_non_owner_forbidden(
     headers = get_auth_header(another_regular_user)
     response = api_client.delete(f"/api/registrations/{sample_registration.id}/", **headers)
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ==========================================
+# 6. Deepened Seam and Ownership Validation Tests
+# ==========================================
+
+
+@pytest.mark.django_db
+def test_create_registration_other_user_forbidden(
+    api_client, regular_user, another_regular_user, get_auth_header, sample_ticket
+):
+    """Verify standard User cannot create a registration for another user (403 Forbidden)."""
+    headers = get_auth_header(regular_user)
+    payload = {
+        "ticket_id": str(sample_ticket.id),
+        "user_id": str(another_regular_user.id),
+    }
+    response = api_client.post("/api/registrations/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_create_registration_admin_for_other_user(api_client, admin_user, regular_user, get_auth_header, sample_ticket):
+    """Verify Admin can create a registration for another user."""
+    headers = get_auth_header(admin_user)
+    payload = {
+        "ticket_id": str(sample_ticket.id),
+        "user_id": str(regular_user.id),
+    }
+    response = api_client.post("/api/registrations/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["user"] == str(regular_user.id)
+
+
+@pytest.mark.django_db
+def test_update_registration_change_user_forbidden(
+    api_client, regular_user, another_regular_user, get_auth_header, sample_registration
+):
+    """Verify standard User cannot reassign registration to another user (403 Forbidden)."""
+    headers = get_auth_header(regular_user)
+    response = api_client.put(
+        f"/api/registrations/{sample_registration.id}/",
+        {"user_id": str(another_regular_user.id)},
+        format="json",
+        **headers,
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_registration_serializer_create_schedules_reminder(sample_ticket, regular_user):
+    """Verify RegistrationSerializer.create automatically invokes schedule_event_reminder."""
+    from unittest.mock import patch
+
+    serializer = RegistrationSerializer(data={"ticket_id": str(sample_ticket.id), "user_id": str(regular_user.id)})
+    assert serializer.is_valid(), serializer.errors
+
+    with patch("apps.registrations.serializers.schedule_event_reminder") as mock_schedule:
+        registration = serializer.save()
+        assert mock_schedule.called
+        assert mock_schedule.call_args[0][0] == registration

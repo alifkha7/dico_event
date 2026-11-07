@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.events",
     "apps.tickets",
+    "apps.registrations",
     "api.apps.ApiConfig",
 ]
 

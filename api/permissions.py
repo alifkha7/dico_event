@@ -15,6 +15,7 @@ from apps.events.permissions import (
     EventPosterUploadPermission,
     EventViewSetPermission,
 )
+from apps.registrations.permissions import RegistrationViewSetPermission
 from apps.tickets.permissions import TicketViewSetPermission
 from apps.users.permissions import UserViewSetPermission
 
@@ -35,35 +36,6 @@ __all__ = [
     "is_admin_user",
     "is_organizer_user",
 ]
-
-
-class RegistrationViewSetPermission(permissions.BasePermission):
-    """
-    Permission logic for RegistrationViewSet:
-    - GET (list): Admin or Superuser only (regular user gets 403)
-    - GET (retrieve): AllowAny per ADR-0001
-    - POST (create): Authenticated users (User, Organizer, Admin, Superuser)
-    - PUT / PATCH (update): Admin, Superuser, or owner User
-    - DELETE (destroy): Admin, Superuser, or owner User
-    """
-
-    def has_permission(self, request, view):
-        if view.action == "retrieve":
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if view.action == "list":
-            return is_admin_user(request.user)
-        return True
-
-    def has_object_permission(self, request, view, obj):
-        if view.action == "retrieve":
-            return True
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if is_admin_user(request.user):
-            return True
-        return str(obj.user_id) == str(request.user.id)
 
 
 class PaymentViewSetPermission(permissions.BasePermission):
