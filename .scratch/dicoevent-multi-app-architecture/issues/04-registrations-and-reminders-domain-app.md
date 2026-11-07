@@ -4,7 +4,7 @@
 
 **Blocked by:** 03: Tickets Domain Application (`tickets`)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The `registrations` application is registered in Django's installed applications under the `registrations` label and owns the **Registration** model (`db_table = "registrations"`, cascading delete from **Ticket** and **User**) and its initial migration.
 - [ ] `RegistrationSerializer` inherits from `DualKeyModelSerializer` to resolve `ticket` / `ticket_id` (with `select_related("event")`) and `user` / `user_id`, and its `create` lifecycle automatically invokes `schedule_event_reminder(registration)` inside a resilient error boundary.
