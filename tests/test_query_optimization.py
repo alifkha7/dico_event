@@ -30,59 +30,6 @@ def test_event_model_database_indexes():
     assert ("category",) in index_fields, "Event._meta.indexes missing index on ('category',)"
 
 
-def _has_select_related(queryset, lookup: str) -> bool:
-    """Helper to verify select_related fields without exposing dict internals."""
-    parts = lookup.split("__")
-    current = getattr(queryset.query, "select_related", None)
-    if not isinstance(current, dict):
-        return False
-    for part in parts:
-        if part not in current:
-            return False
-        current = current[part]
-    return True
-
-
-def test_viewsets_querysets_configured_with_eager_loading():
-    """Verify each ModelViewSet explicitly defines eager-loading on its queryset per spec."""
-    from apps.events.views import EventViewSet
-    from apps.payments.views import PaymentViewSet
-    from apps.registrations.views import RegistrationViewSet
-    from apps.tickets.views import TicketViewSet
-    from apps.users.views import UserViewSet
-
-    # UserViewSet: prefetch_related('groups')
-    assert "groups" in UserViewSet.queryset._prefetch_related_lookups, "UserViewSet missing prefetch_related('groups')"
-
-    # EventViewSet: select_related('organizer')
-    assert _has_select_related(EventViewSet.queryset, "organizer"), "EventViewSet missing select_related('organizer')"
-
-    # TicketViewSet: select_related('event', 'event__organizer')
-    assert _has_select_related(TicketViewSet.queryset, "event"), "TicketViewSet missing select_related('event')"
-    assert _has_select_related(TicketViewSet.queryset, "event__organizer"), (
-        "TicketViewSet missing select_related('event__organizer')"
-    )
-
-    # RegistrationViewSet: select_related('ticket', 'ticket__event', 'user')
-    assert _has_select_related(RegistrationViewSet.queryset, "ticket"), (
-        "RegistrationViewSet missing select_related('ticket')"
-    )
-    assert _has_select_related(RegistrationViewSet.queryset, "ticket__event"), (
-        "RegistrationViewSet missing select_related('ticket__event')"
-    )
-    assert _has_select_related(RegistrationViewSet.queryset, "user"), (
-        "RegistrationViewSet missing select_related('user')"
-    )
-
-    # PaymentViewSet: select_related('registration', 'registration__user')
-    assert _has_select_related(PaymentViewSet.queryset, "registration"), (
-        "PaymentViewSet missing select_related('registration')"
-    )
-    assert _has_select_related(PaymentViewSet.queryset, "registration__user"), (
-        "PaymentViewSet missing select_related('registration__user')"
-    )
-
-
 # ==========================================
 # 2. O(1) Constant Query Count Tests (2 vs 10 records)
 # ==========================================

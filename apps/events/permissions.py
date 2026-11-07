@@ -1,12 +1,18 @@
 from rest_framework import permissions
 
-from apps.core.permissions import RoleOwnershipPermission, can_create_or_manage_events
+from apps.core.permissions import RoleOwnershipPermission, is_admin_user, is_organizer_user
 
 __all__ = [
     "CanUploadPosterPermission",
     "EventPosterUploadPermission",
     "EventViewSetPermission",
+    "can_create_or_manage_events",
 ]
+
+
+def can_create_or_manage_events(user):
+    """Check if user has permission to create or manage events."""
+    return is_admin_user(user) or is_organizer_user(user)
 
 
 class EventViewSetPermission(RoleOwnershipPermission):

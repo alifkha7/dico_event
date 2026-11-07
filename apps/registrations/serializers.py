@@ -14,7 +14,7 @@ __all__ = ["RegistrationSerializer"]
 
 class RegistrationSerializer(DualKeyModelSerializer):
     """
-    Registration serializer enforcing domain attendee booking rules and 2-hour pre-Event reminder lifecycle:
+    Registration serializer enforcing domain User Registration rules and 2-hour pre-Event reminder lifecycle:
     - Dual-key ticket / ticket_id resolution with Ticket.objects.select_related("event")
     - Dual-key user / user_id resolution defaulting to request.user
     - Automatic resilient 2-hour pre-Event reminder scheduling inside create()

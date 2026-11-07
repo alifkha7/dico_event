@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 from django.conf import settings
 from loguru import logger
 from minio import Minio
+from PIL import Image
+from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from apps.core.permissions import is_admin_user
@@ -15,6 +17,7 @@ __all__ = [
     "get_minio_client",
     "parse_minio_endpoint",
     "upload_poster_to_minio",
+    "validate_poster_image",
 ]
 
 
@@ -100,6 +103,37 @@ def upload_poster_to_minio(file_obj, filename: str, content_type: str = "applica
     return unique_key
 
 
+def validate_poster_image(image_file):
+    """
+    Validate that an image file does not exceed 500 KB (500 * 1024 bytes)
+    and is a valid image according to Pillow.
+    Raises serializers.ValidationError on failure.
+    """
+    max_size = 500 * 1024
+    size = getattr(image_file, "size", None)
+    if size is None and hasattr(image_file, "seek") and hasattr(image_file, "tell"):
+        image_file.seek(0, os.SEEK_END)
+        size = image_file.tell()
+        image_file.seek(0)
+
+    if size is not None and size > max_size:
+        raise serializers.ValidationError(f"File size exceeds the 500 KB limit ({size} bytes).")
+
+    content_type = getattr(image_file, "content_type", None)
+    if content_type is not None and not content_type.startswith("image/"):
+        raise serializers.ValidationError("File must have an image/* MIME type.")
+
+    try:
+        img = Image.open(image_file)
+        img.verify()
+        if hasattr(image_file, "seek"):
+            image_file.seek(0)
+    except Exception:
+        raise serializers.ValidationError("Uploaded file is not a valid image.")
+
+    return image_file
+
+
 def attach_event_poster(event, image_file, actor):
     """
     Deep intake seam encapsulating Organizer ownership verification, MinIO object upload (<= 500 KB),
@@ -112,6 +146,8 @@ def attach_event_poster(event, image_file, actor):
                 f"event '{event.name}' (ID: {event.id}, Organizer ID: {event.organizer_id})."
             )
             raise PermissionDenied("You do not have permission to upload a poster for this event.")
+
+    validate_poster_image(image_file)
 
     filename = getattr(image_file, "name", "poster.png")
     content_type = getattr(image_file, "content_type", "image/jpeg")

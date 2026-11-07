@@ -9,6 +9,7 @@ from rest_framework import serializers
 from rest_framework.test import APIRequestFactory
 
 from apps.core.permissions import (
+    IsSuperuser,
     RoleOwnershipPermission,
     get_user_role_names,
     is_admin_user,
@@ -141,6 +142,25 @@ def test_role_caching_and_helper_functions(regular_user, admin_user, organizer_u
 
     # Test organizer user
     assert is_organizer_user(organizer_user)
+
+
+@pytest.mark.django_db
+def test_is_superuser_permission(superuser, regular_user):
+    """Verify IsSuperuser permission allows superuser and denies regular or anonymous user."""
+    perm = IsSuperuser()
+    factory = APIRequestFactory()
+
+    req_super = factory.get("/api/test/")
+    req_super.user = superuser
+    assert perm.has_permission(req_super, None) is True
+
+    req_reg = factory.get("/api/test/")
+    req_reg.user = regular_user
+    assert perm.has_permission(req_reg, None) is False
+
+    req_anon = factory.get("/api/test/")
+    req_anon.user = AnonymousUser()
+    assert perm.has_permission(req_anon, None) is False
 
 
 @pytest.mark.django_db

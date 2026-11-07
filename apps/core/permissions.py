@@ -30,12 +30,8 @@ def get_user_role_names(user):
     return names
 
 
-# Backward-compatible alias for existing callers
-_get_user_group_names_lower = get_user_role_names
-
-
 def is_admin_user(user):
-    """Check if user is a Superuser or member of an 'admin' group (case-insensitive)."""
+    """Check if user is a Superuser or assigned to an 'admin' Group (case-insensitive)."""
     if not user or not getattr(user, "is_authenticated", False):
         return False
     if getattr(user, "is_superuser", False):
@@ -44,15 +40,10 @@ def is_admin_user(user):
 
 
 def is_organizer_user(user):
-    """Check if user is a member of an 'organizer' group (case-insensitive)."""
+    """Check if user is assigned to an 'organizer' Group (case-insensitive)."""
     if not user or not getattr(user, "is_authenticated", False):
         return False
     return "organizer" in get_user_role_names(user)
-
-
-def can_create_or_manage_events(user):
-    """Check if user has permission to create or manage events."""
-    return is_admin_user(user) or is_organizer_user(user)
 
 
 class IsSuperuser(permissions.BasePermission):
@@ -62,11 +53,8 @@ class IsSuperuser(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
 
 
-IsSuperUser = IsSuperuser
-
-
 class IsAdminOrSuperuser(permissions.BasePermission):
-    """Allows access to superusers or members of the admin group."""
+    """Allows access to Superusers or Users assigned to the admin Group."""
 
     def has_permission(self, request, view):
         return bool(is_admin_user(request.user))
@@ -130,10 +118,12 @@ class RoleOwnershipPermission(permissions.BasePermission):
             if not (self.allowed_create_roles & user_roles):
                 return False
 
-        if action in ["update", "partial_update", "destroy"] and self.allowed_create_roles:
-            user_roles = get_user_role_names(request.user)
-            if not (self.allowed_create_roles & user_roles):
-                return False
+        if action in ["update", "partial_update", "destroy"]:
+            required_roles = self.owner_roles or self.allowed_create_roles
+            if required_roles:
+                user_roles = get_user_role_names(request.user)
+                if not (required_roles & user_roles):
+                    return False
 
         return True
 
