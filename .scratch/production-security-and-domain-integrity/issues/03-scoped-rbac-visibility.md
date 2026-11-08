@@ -4,7 +4,7 @@
 
 **Blocked by:** 01: Milestone Tag, Modular Environment Settings (`base`, `dev`, `prod`, `test`), and CORS Whitelisting
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Unauthenticated `GET` requests to `Event` list/detail, `Event Poster` list, and `Ticket` list/detail remain publicly accessible (`200 OK`), while unauthenticated `GET` requests to `User`, `Registration`, and `Payment` list or detail endpoints are rejected with `401 Unauthorized`.
 - [ ] An authenticated `User` can `GET` and `PUT`/`PATCH` their own `User` detail endpoint (`200 OK`), is rejected with `403 Forbidden` when attempting to `GET`, `PUT`, `PATCH`, or `DELETE` another `User` or list all `User`s, while `Admin` and `Superuser` actors can list and retrieve all `User` profiles.

@@ -4,7 +4,7 @@
 
 **Blocked by:** 01: Milestone Tag, Modular Environment Settings (`base`, `dev`, `prod`, `test`), and CORS Whitelisting
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Uploading an `Event Poster` (`POST /api/events/upload/`) and listing `Event Poster`s (`GET /api/events/<id>/posters/` and `GET /api/event-posters/`) return `id`, `image` (the stored object key), `image_url` (a presigned GET URL with configurable expiry defaulting to 3600 seconds), and `event`.
 - [ ] Presigned URL generation uses `MINIO_PUBLIC_ENDPOINT_URL` when configured (falling back to `MINIO_ENDPOINT_URL`) with an explicit default region so cryptographic signing executes locally without requiring a network call to MinIO, and Docker Compose configures `MINIO_PUBLIC_ENDPOINT_URL` for host browser resolution.
