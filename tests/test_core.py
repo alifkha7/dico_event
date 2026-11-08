@@ -260,3 +260,22 @@ def test_core_modules_do_not_import_domain_apps():
                 assert not node.module.startswith(forbidden_prefixes), (
                     f"{py_file.name} imports from forbidden domain module '{node.module}'"
                 )
+
+
+def test_custom_exception_handler_protected_error():
+    """Verify custom_exception_handler intercepts ProtectedError and returns 409 Conflict."""
+    from django.db.models import ProtectedError
+
+    from apps.core.exceptions import custom_exception_handler
+
+    dummy_view = MagicMock()
+    context = {"view": dummy_view, "request": MagicMock()}
+    exc = ProtectedError("Cannot delete some protected objects", [MagicMock()])
+
+    response = custom_exception_handler(exc, context)
+
+    assert response is not None
+    assert response.status_code == 409
+    assert response.data == {
+        "detail": "Cannot delete this resource because it is referenced by existing transactional records."
+    }

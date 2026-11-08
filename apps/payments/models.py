@@ -9,7 +9,7 @@ __all__ = ["Payment"]
 
 class Payment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    registration = models.ForeignKey(Registration, on_delete=models.CASCADE, related_name="payments")
+    registration = models.ForeignKey(Registration, on_delete=models.PROTECT, related_name="payments")
     payment_method = models.CharField(max_length=100)
     payment_status = models.CharField(max_length=100)
     amount_paid = models.IntegerField()

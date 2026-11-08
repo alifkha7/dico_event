@@ -7,7 +7,7 @@ from apps.events.models import Event
 
 class Ticket(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="tickets")
+    event = models.ForeignKey(Event, on_delete=models.PROTECT, related_name="tickets")
     name = models.CharField(max_length=255)
     price = models.IntegerField()
     sales_start = models.DateTimeField()

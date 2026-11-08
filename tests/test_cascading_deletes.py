@@ -11,35 +11,30 @@ from apps.tickets.models import Ticket
 
 User = get_user_model()
 
+PROTECTED_DETAIL = "Cannot delete this resource because it is referenced by existing transactional records."
 
-@pytest.mark.django_db
-def test_cascading_delete_ticket_to_registration_and_payment_adr_0001(
-    api_client, superuser, organizer_user, regular_user, get_auth_header
-):
-    """
-    Test ADR-0001 Requirement 4:
-    In the Version 2 Postman collection, the [Mandatory] Payments -> Delete Payments step
-    sends DELETE /api/tickets/{{ticketId}}/ and then asserts that
-    GET /api/payments/{{paymentId}} returns 404 Not Found.
-    """
+
+@pytest.fixture
+def test_setup_data(organizer_user, regular_user):
+    """Fixture providing an event, ticket, registration, and payment hierarchy."""
     now = datetime.now(timezone.utc)
     event = Event.objects.create(
-        name="Cascading Test Event",
-        description="Testing cascades",
-        location="Online",
+        name="Audit Protection Summit",
+        description="Testing relational audit protection",
+        location="Hybrid",
         start_time=now + timedelta(days=1),
         end_time=now + timedelta(days=2),
         status="published",
         quota=100,
-        category="Testing",
+        category="Conference",
         organizer=organizer_user,
     )
 
     ticket = Ticket.objects.create(
         event=event,
-        name="Cascade Ticket",
+        name="General Admission",
         price=50000,
-        sales_start=now,
+        sales_start=now - timedelta(hours=1),
         sales_end=now + timedelta(days=1),
         quota=50,
     )
@@ -51,39 +46,147 @@ def test_cascading_delete_ticket_to_registration_and_payment_adr_0001(
 
     payment = Payment.objects.create(
         registration=registration,
-        payment_method="Credit Card",
+        payment_method="Bank Transfer",
         payment_status="Pending",
         amount_paid=50000,
     )
 
-    ticket_id = str(ticket.id)
-    registration_id = str(registration.id)
-    payment_id = str(payment.id)
+    return {
+        "event": event,
+        "ticket": ticket,
+        "registration": registration,
+        "payment": payment,
+        "organizer": organizer_user,
+        "attendee": regular_user,
+    }
 
+
+@pytest.mark.django_db
+def test_delete_event_with_tickets_returns_409_conflict(api_client, superuser, get_auth_header, test_setup_data):
+    """Verify attempting to DELETE an Event that has Tickets returns 409 Conflict and preserves records."""
+    event = test_setup_data["event"]
+    ticket = test_setup_data["ticket"]
     headers = get_auth_header(superuser)
 
-    # Verify they exist
-    assert api_client.get(f"/api/tickets/{ticket_id}/").status_code == status.HTTP_200_OK
-    assert api_client.get(f"/api/registrations/{registration_id}/", **headers).status_code == status.HTTP_200_OK
-    assert api_client.get(f"/api/payments/{payment_id}/", **headers).status_code == status.HTTP_200_OK
+    response = api_client.delete(f"/api/events/{event.id}/", **headers)
 
-    # Superuser deletes the Ticket
-    del_res = api_client.delete(f"/api/tickets/{ticket_id}/", **headers)
-    assert del_res.status_code == status.HTTP_204_NO_CONTENT
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.data == {"detail": PROTECTED_DETAIL}
+    assert Event.objects.filter(id=event.id).exists()
+    assert Ticket.objects.filter(id=ticket.id).exists()
 
-    # Verify ticket returns 404 with and without trailing slash
-    assert api_client.get(f"/api/tickets/{ticket_id}/").status_code == status.HTTP_404_NOT_FOUND
-    assert api_client.get(f"/api/tickets/{ticket_id}").status_code == status.HTTP_404_NOT_FOUND
 
-    # Verify registration returns 404 with and without trailing slash
-    assert api_client.get(f"/api/registrations/{registration_id}/", **headers).status_code == status.HTTP_404_NOT_FOUND
-    assert api_client.get(f"/api/registrations/{registration_id}", **headers).status_code == status.HTTP_404_NOT_FOUND
+@pytest.mark.django_db
+def test_delete_ticket_with_registrations_returns_409_conflict(api_client, superuser, get_auth_header, test_setup_data):
+    """Verify attempting to DELETE a Ticket that has Registrations returns 409 Conflict and preserves records."""
+    ticket = test_setup_data["ticket"]
+    registration = test_setup_data["registration"]
+    headers = get_auth_header(superuser)
 
-    # Verify payment returns 404 with and without trailing slash per ADR-0001
-    assert api_client.get(f"/api/payments/{payment_id}/", **headers).status_code == status.HTTP_404_NOT_FOUND
-    assert api_client.get(f"/api/payments/{payment_id}", **headers).status_code == status.HTTP_404_NOT_FOUND
+    response = api_client.delete(f"/api/tickets/{ticket.id}/", **headers)
 
-    # Verify DB rows are actually gone
-    assert not Ticket.objects.filter(id=ticket.id).exists()
-    assert not Registration.objects.filter(id=registration.id).exists()
-    assert not Payment.objects.filter(id=payment.id).exists()
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.data == {"detail": PROTECTED_DETAIL}
+    assert Ticket.objects.filter(id=ticket.id).exists()
+    assert Registration.objects.filter(id=registration.id).exists()
+
+
+@pytest.mark.django_db
+def test_delete_registration_with_payments_returns_409_conflict(
+    api_client, regular_user, get_auth_header, test_setup_data
+):
+    """Verify attempting to DELETE a Registration that has Payments returns 409 Conflict and preserves records."""
+    registration = test_setup_data["registration"]
+    payment = test_setup_data["payment"]
+    headers = get_auth_header(regular_user)
+
+    response = api_client.delete(f"/api/registrations/{registration.id}/", **headers)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.data == {"detail": PROTECTED_DETAIL}
+    assert Registration.objects.filter(id=registration.id).exists()
+    assert Payment.objects.filter(id=payment.id).exists()
+
+
+@pytest.mark.django_db
+def test_delete_user_with_registrations_returns_409_conflict(api_client, superuser, get_auth_header, test_setup_data):
+    """Verify attempting to DELETE a User with Registrations returns 409 Conflict and preserves records."""
+    attendee = test_setup_data["attendee"]
+    registration = test_setup_data["registration"]
+    headers = get_auth_header(superuser)
+
+    response = api_client.delete(f"/api/users/{attendee.id}/", **headers)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.data == {"detail": PROTECTED_DETAIL}
+    assert User.objects.filter(id=attendee.id).exists()
+    assert Registration.objects.filter(id=registration.id).exists()
+
+
+@pytest.mark.django_db
+def test_delete_user_with_owned_events_returns_409_conflict(api_client, superuser, get_auth_header, test_setup_data):
+    """Verify attempting to DELETE an Organizer User with owned Events returns 409 Conflict and preserves records."""
+    organizer = test_setup_data["organizer"]
+    event = test_setup_data["event"]
+    headers = get_auth_header(superuser)
+
+    response = api_client.delete(f"/api/users/{organizer.id}/", **headers)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.data == {"detail": PROTECTED_DETAIL}
+    assert User.objects.filter(id=organizer.id).exists()
+    assert Event.objects.filter(id=event.id).exists()
+
+
+@pytest.mark.django_db
+def test_clean_deletions_when_unreferenced_return_204_no_content(
+    api_client, superuser, organizer_user, regular_user, get_auth_header
+):
+    """Verify deleting unreferenced Event, Ticket, Registration, and User succeeds with 204 No Content."""
+    now = datetime.now(timezone.utc)
+    headers = get_auth_header(superuser)
+
+    # 1. Unreferenced Registration (no payments)
+    solo_event = Event.objects.create(
+        name="Solo Event",
+        description="Desc",
+        location="Online",
+        start_time=now + timedelta(days=1),
+        end_time=now + timedelta(days=2),
+        status="published",
+        quota=50,
+        category="Solo",
+        organizer=organizer_user,
+    )
+    solo_ticket = Ticket.objects.create(
+        event=solo_event,
+        name="Solo Ticket",
+        price=10000,
+        sales_start=now,
+        sales_end=now + timedelta(days=1),
+        quota=20,
+    )
+    solo_reg = Registration.objects.create(ticket=solo_ticket, user=regular_user)
+    res_reg = api_client.delete(f"/api/registrations/{solo_reg.id}/", **headers)
+    assert res_reg.status_code == status.HTTP_204_NO_CONTENT
+    assert not Registration.objects.filter(id=solo_reg.id).exists()
+
+    # 2. Unreferenced Ticket (no registrations)
+    res_ticket = api_client.delete(f"/api/tickets/{solo_ticket.id}/", **headers)
+    assert res_ticket.status_code == status.HTTP_204_NO_CONTENT
+    assert not Ticket.objects.filter(id=solo_ticket.id).exists()
+
+    # 3. Unreferenced Event (no tickets)
+    res_event = api_client.delete(f"/api/events/{solo_event.id}/", **headers)
+    assert res_event.status_code == status.HTTP_204_NO_CONTENT
+    assert not Event.objects.filter(id=solo_event.id).exists()
+
+    # 4. Unreferenced User (no registrations, no owned events)
+    clean_user = User.objects.create_user(
+        username="clean_user",
+        email="clean@example.com",
+        password="ValidPassword123!",
+    )
+    res_user = api_client.delete(f"/api/users/{clean_user.id}/", **headers)
+    assert res_user.status_code == status.HTTP_204_NO_CONTENT
+    assert not User.objects.filter(id=clean_user.id).exists()
