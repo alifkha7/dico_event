@@ -1,3 +1,5 @@
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from rest_framework import serializers
 
 from apps.core.serializers import DualKeyModelSerializer
@@ -63,7 +65,20 @@ class TicketSerializer(DualKeyModelSerializer):
         if start is not None and end is not None and start >= end:
             raise serializers.ValidationError({"sales_end": "Sales end must be after sales start."})
 
-        return super().validate(attrs)
+        attrs = super().validate(attrs)
+
+        event = attrs.get("event") or (self.instance.event if self.instance else None)
+        quota = attrs.get("quota") if "quota" in attrs else (self.instance.quota if self.instance else None)
+
+        if event is not None and quota is not None and hasattr(event, "quota"):
+            qs = Ticket.objects.filter(event=event)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            existing_sum = qs.aggregate(total=Coalesce(Sum("quota"), 0))["total"]
+            if existing_sum + quota > event.quota:
+                raise serializers.ValidationError({"quota": "Total ticket quota cannot exceed the event quota."})
+
+        return attrs
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

@@ -426,3 +426,55 @@ def test_events_app_direct_imports():
     assert Event._meta.app_label == "events"
     assert Event._meta.db_table == "events"
     assert issubclass(EventViewSet, CachedEventViewSetMixin)
+
+
+# ==========================================
+# 8. Event Quota Invariant (Event.quota >= SUM(Ticket.quota))
+# ==========================================
+
+
+@pytest.mark.django_db
+def test_update_event_quota_below_allocated_ticket_quota_rejected(
+    api_client, organizer_user, get_auth_header, sample_event_data
+):
+    """Verify decreasing event quota below sum of existing ticket quotas is rejected (400 Bad Request)."""
+    from datetime import datetime, timedelta, timezone
+
+    from apps.tickets.models import Ticket
+
+    # Create event with quota 500
+    res_create = api_client.post("/api/events/", sample_event_data, format="json", **get_auth_header(organizer_user))
+    assert res_create.status_code == status.HTTP_201_CREATED
+    event_id = res_create.data["id"]
+
+    now = datetime.now(timezone.utc)
+    # Allocate 2 tickets totaling 300 (200 + 100)
+    Ticket.objects.create(
+        event_id=event_id,
+        name="Ticket A",
+        price=50000,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=4),
+        quota=200,
+    )
+    Ticket.objects.create(
+        event_id=event_id,
+        name="Ticket B",
+        price=75000,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=4),
+        quota=100,
+    )
+
+    headers = get_auth_header(organizer_user)
+
+    # Attempt to reduce event quota to 250 (< 300 allocated) -> must fail with 400 Bad Request
+    res_fail = api_client.patch(f"/api/events/{event_id}/", {"quota": 250}, format="json", **headers)
+    assert res_fail.status_code == status.HTTP_400_BAD_REQUEST
+    assert "quota" in res_fail.data
+    assert "cannot be less than" in str(res_fail.data["quota"]).lower()
+
+    # Updating event quota to 350 (>= 300 allocated) -> must succeed with 200 OK
+    res_ok = api_client.patch(f"/api/events/{event_id}/", {"quota": 350}, format="json", **headers)
+    assert res_ok.status_code == status.HTTP_200_OK
+    assert res_ok.data["quota"] == 350

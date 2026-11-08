@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from rest_framework import serializers
 
 from apps.core.serializers import DualKeyModelSerializer
@@ -64,7 +66,16 @@ class EventSerializer(DualKeyModelSerializer):
             if missing:
                 raise serializers.ValidationError({f: "This field is required." for f in missing})
 
-        return super().validate(attrs)
+        attrs = super().validate(attrs)
+
+        if self.instance is not None and "quota" in attrs:
+            allocated_ticket_quota = self.instance.tickets.aggregate(total=Coalesce(Sum("quota"), 0))["total"]
+            if attrs["quota"] < allocated_ticket_quota:
+                raise serializers.ValidationError(
+                    {"quota": "Event quota cannot be less than the total allocated ticket quota."}
+                )
+
+        return attrs
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

@@ -162,7 +162,7 @@ def test_clean_deletions_when_unreferenced_return_204_no_content(
         event=solo_event,
         name="Solo Ticket",
         price=10000,
-        sales_start=now,
+        sales_start=now - timedelta(days=1),
         sales_end=now + timedelta(days=1),
         quota=20,
     )

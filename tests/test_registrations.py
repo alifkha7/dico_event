@@ -50,7 +50,7 @@ def sample_ticket(organizer_user):
         event=event,
         name="General Admission",
         price=100000,
-        sales_start=now,
+        sales_start=now - timedelta(days=1),
         sales_end=now + timedelta(days=4),
         quota=100,
     )
@@ -215,7 +215,7 @@ def test_list_registrations_organizer_and_dual_role(
         event=other_event,
         name="Standard",
         price=50000,
-        sales_start=now,
+        sales_start=now - timedelta(days=1),
         sales_end=now + timedelta(days=5),
         quota=50,
     )
@@ -477,3 +477,217 @@ def test_registration_serializer_create_schedules_reminder(sample_ticket, regula
         registration = serializer.save()
         assert mock_schedule.called
         assert mock_schedule.call_args[0][0] == registration
+
+
+# ==========================================
+# 11. Domain Integrity & Intake Invariants (Ticket 05)
+# ==========================================
+
+
+@pytest.mark.django_db
+def test_duplicate_registration_same_user_and_ticket_rejected(
+    api_client, regular_user, get_auth_header, sample_ticket, sample_registration
+):
+    """Verify duplicate registration by the same user for the same ticket is rejected (400 Bad Request)."""
+    headers = get_auth_header(regular_user)
+    payload = {"ticket_id": str(sample_ticket.id)}
+    response = api_client.post("/api/registrations/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "already registered" in str(response.data).lower()
+
+
+@pytest.mark.django_db
+def test_registration_model_unique_constraint_enforced(sample_ticket, regular_user, sample_registration):
+    """Verify Registration model defines and DB enforces UniqueConstraint on (ticket, user)."""
+    from django.db.utils import IntegrityError
+
+    constraint_names = [c.name for c in Registration._meta.constraints]
+    assert "unique_ticket_user_registration" in constraint_names
+
+    with pytest.raises(IntegrityError):
+        Registration.objects.create(ticket=sample_ticket, user=regular_user)
+
+
+@pytest.mark.django_db
+def test_create_registration_before_sales_start_rejected(api_client, regular_user, get_auth_header, organizer_user):
+    """Verify creating a registration before sales_start is rejected (400 Bad Request)."""
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Future Sales Event",
+        description="Event description",
+        location="Bandung",
+        start_time=now + timedelta(days=10),
+        end_time=now + timedelta(days=11),
+        status="published",
+        quota=50,
+        category="Tech",
+        organizer=organizer_user,
+    )
+    future_ticket = Ticket.objects.create(
+        event=event,
+        name="Future Ticket",
+        price=50000,
+        sales_start=now + timedelta(days=1),
+        sales_end=now + timedelta(days=5),
+        quota=20,
+    )
+
+    headers = get_auth_header(regular_user)
+    response = api_client.post("/api/registrations/", {"ticket_id": str(future_ticket.id)}, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "sales window" in str(response.data).lower()
+
+
+@pytest.mark.django_db
+def test_create_registration_after_sales_end_rejected(api_client, regular_user, get_auth_header, organizer_user):
+    """Verify creating a registration after sales_end is rejected (400 Bad Request)."""
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Past Sales Event",
+        description="Event description",
+        location="Bandung",
+        start_time=now + timedelta(days=10),
+        end_time=now + timedelta(days=11),
+        status="published",
+        quota=50,
+        category="Tech",
+        organizer=organizer_user,
+    )
+    expired_ticket = Ticket.objects.create(
+        event=event,
+        name="Expired Ticket",
+        price=50000,
+        sales_start=now - timedelta(days=5),
+        sales_end=now - timedelta(days=1),
+        quota=20,
+    )
+
+    headers = get_auth_header(regular_user)
+    response = api_client.post("/api/registrations/", {"ticket_id": str(expired_ticket.id)}, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "sales window" in str(response.data).lower()
+
+
+@pytest.mark.django_db
+def test_create_registration_within_sales_window_succeeds(api_client, regular_user, get_auth_header, organizer_user):
+    """Verify creating a registration within active sales window succeeds (201 Created)."""
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Active Sales Event",
+        description="Event description",
+        location="Bandung",
+        start_time=now + timedelta(days=10),
+        end_time=now + timedelta(days=11),
+        status="published",
+        quota=50,
+        category="Tech",
+        organizer=organizer_user,
+    )
+    active_ticket = Ticket.objects.create(
+        event=event,
+        name="Active Ticket",
+        price=50000,
+        sales_start=now - timedelta(hours=2),
+        sales_end=now + timedelta(days=2),
+        quota=20,
+    )
+
+    headers = get_auth_header(regular_user)
+    response = api_client.post("/api/registrations/", {"ticket_id": str(active_ticket.id)}, format="json", **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["ticket"] == str(active_ticket.id)
+
+
+@pytest.mark.django_db
+def test_create_registration_ticket_quota_full_rejected(
+    api_client, regular_user, another_regular_user, get_auth_header, organizer_user
+):
+    """Verify registration intake is rejected (400) when ticket quota capacity is exhausted."""
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Limited Event",
+        description="Event description",
+        location="Bandung",
+        start_time=now + timedelta(days=10),
+        end_time=now + timedelta(days=11),
+        status="published",
+        quota=10,
+        category="Tech",
+        organizer=organizer_user,
+    )
+    solo_ticket = Ticket.objects.create(
+        event=event,
+        name="Single Slot Ticket",
+        price=10000,
+        sales_start=now - timedelta(hours=1),
+        sales_end=now + timedelta(days=2),
+        quota=1,
+    )
+
+    # First user registers -> 201 Created
+    headers1 = get_auth_header(regular_user)
+    res1 = api_client.post("/api/registrations/", {"ticket_id": str(solo_ticket.id)}, format="json", **headers1)
+    assert res1.status_code == status.HTTP_201_CREATED
+
+    # Second user attempts to register for same ticket -> 400 Bad Request
+    headers2 = get_auth_header(another_regular_user)
+    res2 = api_client.post("/api/registrations/", {"ticket_id": str(solo_ticket.id)}, format="json", **headers2)
+    assert res2.status_code == status.HTTP_400_BAD_REQUEST
+    assert "ticket quota has been reached" in str(res2.data).lower()
+
+
+@pytest.mark.django_db
+def test_create_registration_event_quota_full_rejected(
+    api_client, regular_user, another_regular_user, get_auth_header, organizer_user
+):
+    """Verify registration intake is rejected (400) when event quota capacity is exhausted."""
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Small Venue Event",
+        description="Event description",
+        location="Bandung",
+        start_time=now + timedelta(days=10),
+        end_time=now + timedelta(days=11),
+        status="published",
+        quota=1,  # Event quota is 1!
+        category="Tech",
+        organizer=organizer_user,
+    )
+    ticket_a = Ticket.objects.create(
+        event=event,
+        name="Tier A",
+        price=10000,
+        sales_start=now - timedelta(hours=1),
+        sales_end=now + timedelta(days=2),
+        quota=1,
+    )
+
+    # First user registers for Ticket A -> succeeds (event registrations = 1)
+    headers1 = get_auth_header(regular_user)
+    res1 = api_client.post("/api/registrations/", {"ticket_id": str(ticket_a.id)}, format="json", **headers1)
+    assert res1.status_code == status.HTTP_201_CREATED
+
+    # Second user attempts to register for Ticket A -> rejected (ticket quota reached or event quota reached)
+    user_3 = User.objects.create_user(username="user_3", email="user3@dicoevent.com", password="password123")
+    headers3 = get_auth_header(user_3)
+    res3 = api_client.post("/api/registrations/", {"ticket_id": str(ticket_a.id)}, format="json", **headers3)
+    assert res3.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_registration_intake_locks_ticket_and_event_with_select_for_update(sample_ticket, regular_user):
+    """Verify RegistrationSerializer.create uses select_for_update on Ticket and Event."""
+    from unittest.mock import patch
+
+    serializer = RegistrationSerializer(data={"ticket_id": str(sample_ticket.id), "user_id": str(regular_user.id)})
+    assert serializer.is_valid(), serializer.errors
+
+    with (
+        patch.object(Ticket.objects, "select_for_update", wraps=Ticket.objects.select_for_update) as mock_ticket_lock,
+        patch.object(Event.objects, "select_for_update", wraps=Event.objects.select_for_update) as mock_event_lock,
+    ):
+        registration = serializer.save()
+        assert mock_ticket_lock.called
+        assert mock_event_lock.called
+        assert registration.ticket == sample_ticket
+        assert registration.user == regular_user
