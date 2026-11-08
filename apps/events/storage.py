@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -14,7 +15,9 @@ from apps.events.models import EventPoster
 
 __all__ = [
     "attach_event_poster",
+    "generate_presigned_poster_url",
     "get_minio_client",
+    "get_public_minio_client",
     "parse_minio_endpoint",
     "upload_poster_to_minio",
     "validate_poster_image",
@@ -65,6 +68,58 @@ def get_minio_client() -> Minio:
         secure=secure,
     )
     return client
+
+
+def get_public_minio_client() -> Minio:
+    """
+    Instantiate and return a MinIO client configured for public presigned URL generation.
+    Reads:
+    - MINIO_PUBLIC_ENDPOINT_URL (falling back to MINIO_ENDPOINT_URL)
+    - MINIO_ACCESS_KEY
+    - MINIO_SECRET_KEY
+    - MINIO_USE_SSL
+    Region defaults explicitly to 'us-east-1' to enable pure local signing without network lookups.
+    """
+    public_url = getattr(settings, "MINIO_PUBLIC_ENDPOINT_URL", "").strip() or getattr(
+        settings, "MINIO_ENDPOINT_URL", "localhost:9000"
+    )
+    default_secure = getattr(settings, "MINIO_USE_SSL", False)
+    endpoint, secure = parse_minio_endpoint(public_url, default_secure=default_secure)
+
+    access_key = getattr(settings, "MINIO_ACCESS_KEY", "minioadmin")
+    secret_key = getattr(settings, "MINIO_SECRET_KEY", "minioadmin")
+
+    return Minio(
+        endpoint=endpoint,
+        access_key=access_key,
+        secret_key=secret_key,
+        secure=secure,
+        region="us-east-1",
+    )
+
+
+def generate_presigned_poster_url(image_key: str | None) -> str | None:
+    """
+    Generate a time-limited presigned GET URL for a stored event poster object key.
+    Uses the public MinIO client with explicit region='us-east-1' for local cryptographic signing.
+    Returns None if image_key is empty or if presigning encounters any error, logging a warning.
+    """
+    key = str(image_key).strip() if image_key else ""
+    if not key:
+        return None
+
+    try:
+        expiry_seconds = getattr(settings, "MINIO_PRESIGNED_EXPIRY_SECONDS", 3600)
+        bucket_name = getattr(settings, "MINIO_BUCKET_NAME", "dicoevent-posters")
+        client = get_public_minio_client()
+        return client.presigned_get_object(
+            bucket_name=bucket_name,
+            object_name=key,
+            expires=timedelta(seconds=expiry_seconds),
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to generate presigned URL for image '{image_key}': {exc}")
+        return None
 
 
 def upload_poster_to_minio(file_obj, filename: str, content_type: str = "application/octet-stream") -> str:

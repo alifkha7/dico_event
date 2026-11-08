@@ -127,6 +127,7 @@ def test_docker_compose_services_and_dependencies():
         "REDIS_HOST",
         "CELERY_BROKER_URL",
         "MINIO_ENDPOINT_URL",
+        "MINIO_PUBLIC_ENDPOINT_URL",
         "MAIL_HOST",
         "ENABLE_SILK",
     ]:
@@ -153,6 +154,7 @@ def test_docker_compose_services_and_dependencies():
         "REDIS_HOST",
         "CELERY_BROKER_URL",
         "MINIO_ENDPOINT_URL",
+        "MINIO_PUBLIC_ENDPOINT_URL",
         "MAIL_HOST",
     ]:
         assert env_var in celery_env, f"celery service must define environment variable '{env_var}'"
