@@ -1,5 +1,4 @@
 import os
-import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -8,18 +7,19 @@ from dotenv import load_dotenv
 from apps.core.logging_config import setup_logging
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+# 3 .parent calls: dicoevent/settings -> dicoevent -> repository root
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Load environment variables from .env if present
 load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dicoevent-default-secret-key-change-in-production")
 DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
+_allowed_hosts_env = os.environ.get("ALLOWED_HOSTS", "*").strip()
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()] if _allowed_hosts_env else ["*"]
 
-# Test detection and Silk profiling flag
-RUNNING_TESTS = any("pytest" in arg for arg in sys.argv) or "test" in sys.argv or "pytest" in sys.modules
-ENABLE_SILK = os.environ.get("ENABLE_SILK", "False" if RUNNING_TESTS else "True").lower() in ("true", "1", "yes")
+# Silk profiling flag (default False in base; overridden in dev)
+ENABLE_SILK = os.environ.get("ENABLE_SILK", "False").lower() in ("true", "1", "yes")
 
 # Application definition
 INSTALLED_APPS = [
@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # Third party apps
+    "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
     "django_filters",
@@ -47,6 +48,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -54,9 +56,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-
-if ENABLE_SILK:
-    MIDDLEWARE.insert(0, "silk.middleware.SilkyMiddleware")
 
 ROOT_URLCONF = "dicoevent.urls"
 
@@ -78,37 +77,23 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "dicoevent.wsgi.application"
 
-
 # PostgreSQL Database Settings
-# Strictly read from DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST, DATABASE_PORT
 DATABASE_NAME = os.environ.get("DATABASE_NAME", "dicoevent")
 DATABASE_USER = os.environ.get("DATABASE_USER", "postgres")
 DATABASE_PASSWORD = os.environ.get("DATABASE_PASSWORD", "postgres")
 DATABASE_HOST = os.environ.get("DATABASE_HOST", "localhost")
 DATABASE_PORT = os.environ.get("DATABASE_PORT", "5432")
 
-# Allow running fast in-memory SQLite when running pytest or when USE_SQLITE_TEST is True
-RUNNING_TESTS = any("pytest" in arg for arg in sys.argv) or "test" in sys.argv or "pytest" in sys.modules
-USE_SQLITE = os.environ.get("USE_SQLITE_TEST", "True" if RUNNING_TESTS else "False").lower() in ("true", "1", "yes")
-
-if USE_SQLITE:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": ":memory:",
-        }
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": DATABASE_NAME,
+        "USER": DATABASE_USER,
+        "PASSWORD": DATABASE_PASSWORD,
+        "HOST": DATABASE_HOST,
+        "PORT": DATABASE_PORT,
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": DATABASE_NAME,
-            "USER": DATABASE_USER,
-            "PASSWORD": DATABASE_PASSWORD,
-            "HOST": DATABASE_HOST,
-            "PORT": DATABASE_PORT,
-        }
-    }
+}
 
 # Custom User Model
 AUTH_USER_MODEL = "users.User"
@@ -175,37 +160,21 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
 CACHE_TTL = 3600
 
-if USE_SQLITE:
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "test-cache",
-            "TIMEOUT": 3600,
-        }
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+        "TIMEOUT": 3600,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
     }
-    PASSWORD_HASHERS = [
-        "django.contrib.auth.hashers.MD5PasswordHasher",
-    ]
-else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-            "TIMEOUT": 3600,
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            },
-        }
-    }
+}
 
 # Celery Settings
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TIMEZONE = TIME_ZONE
-
-if USE_SQLITE or "PYTEST_CURRENT_TEST" in os.environ:
-    CELERY_TASK_ALWAYS_EAGER = True
-    CELERY_TASK_EAGER_PROPAGATES = True
 
 # MinIO Object Storage Settings
 MINIO_ENDPOINT_URL = os.environ.get("MINIO_ENDPOINT_URL", "localhost:9000")
@@ -213,6 +182,8 @@ MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
 MINIO_BUCKET_NAME = os.environ.get("MINIO_BUCKET_NAME", "dicoevent-posters")
 MINIO_USE_SSL = os.environ.get("MINIO_USE_SSL", "False").lower() in ("true", "1", "yes")
+MINIO_PUBLIC_ENDPOINT_URL = os.environ.get("MINIO_PUBLIC_ENDPOINT_URL", "").strip() or MINIO_ENDPOINT_URL
+MINIO_PRESIGNED_EXPIRY_SECONDS = int(os.environ.get("MINIO_PRESIGNED_EXPIRY_SECONDS", 3600))
 
 # SMTP Settings
 MAIL_HOST = os.environ.get("MAIL_HOST", "localhost")
@@ -227,6 +198,13 @@ EMAIL_HOST_USER = MAIL_USER
 EMAIL_HOST_PASSWORD = MAIL_PASSWORD
 EMAIL_USE_TLS = False
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", MAIL_USER if MAIL_USER else "noreply@dicoevent.com")
+
+# CORS Settings
+_cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+CORS_ALLOWED_ORIGINS = (
+    [origin.strip() for origin in _cors_origins_env.split(",") if origin.strip()] if _cors_origins_env else []
+)
+CORS_ALLOW_ALL_ORIGINS = False
 
 # Setup Loguru Logging
 setup_logging(BASE_DIR)
