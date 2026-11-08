@@ -331,3 +331,51 @@ def test_custom_exception_handler_protected_error():
     assert response.data == {
         "detail": "Cannot delete this resource because it is referenced by existing transactional records."
     }
+
+
+def test_apps_docstrings_and_identifiers_respect_glossary_avoid_terms():
+    """Verify apps/ modules do not use domain-ambiguous GLOSSARY.md _Avoid_ terms in identifiers or docstrings."""
+    import ast
+    import re
+    from pathlib import Path
+
+    from django.conf import settings
+
+    apps_dir = Path(settings.BASE_DIR) / "apps"
+    avoided_domain_terms = (
+        "attendee",
+        "attendees",
+        "booking",
+        "bookings",
+        "invoice",
+        "invoices",
+        "voucher",
+        "vouchers",
+        "moderator",
+        "moderators",
+        "promoter",
+        "promoters",
+    )
+    pattern = re.compile(r"\b(" + "|".join(avoided_domain_terms) + r")\b", re.IGNORECASE)
+
+    for py_file in apps_dir.rglob("*.py"):
+        if "migrations" in py_file.parts:
+            continue
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        module_doc = ast.get_docstring(tree) or ""
+        match = pattern.search(module_doc)
+        assert not match, f"{py_file} module docstring uses avoided GLOSSARY term '{match.group(0)}'"
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                name_match = pattern.search(node.name)
+                assert not name_match, (
+                    f"{py_file}:{node.lineno} identifier '{node.name}' "
+                    f"uses avoided GLOSSARY term '{name_match.group(0)}'"
+                )
+                doc = ast.get_docstring(node) or ""
+                doc_match = pattern.search(doc)
+                assert not doc_match, (
+                    f"{py_file}:{node.lineno} docstring on '{node.name}' "
+                    f"uses avoided GLOSSARY term '{doc_match.group(0)}'"
+                )

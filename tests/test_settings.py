@@ -364,3 +364,31 @@ def test_cors_allowed_and_disallowed_origins_http_headers(api_client):
     assert response_preflight.status_code == status.HTTP_200_OK
     assert response_preflight.headers.get("Access-Control-Allow-Origin") == "http://localhost:3000"
     assert "GET" in response_preflight.headers.get("Access-Control-Allow-Methods", "")
+
+
+def test_settings_modules_do_not_inspect_sys_argv():
+    """Verify dicoevent/settings/*.py modules never inspect sys.argv."""
+    import ast
+    from pathlib import Path
+
+    from django.conf import settings as django_settings
+
+    settings_dir = Path(django_settings.BASE_DIR) / "dicoevent" / "settings"
+    for py_file in settings_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "sys"
+                and node.attr == "argv"
+            ):
+                raise AssertionError(f"{py_file.name} must not inspect sys.argv")
+
+
+@pytest.mark.django_db
+def test_no_missing_migrations():
+    """Verify all model changes have corresponding Django migrations generated."""
+    from django.core.management import call_command
+
+    call_command("makemigrations", check=True, dry_run=True)

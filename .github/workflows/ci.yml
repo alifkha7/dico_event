@@ -76,6 +76,9 @@ jobs:
       - name: Ruff Format Check
         run: ruff format --check .
 
+      - name: Check for Unapplied Model Migrations
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Apply Database Migrations
         run: python manage.py migrate
 

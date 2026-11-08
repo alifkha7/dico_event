@@ -124,10 +124,15 @@ def test_ci_workflow_steps():
     # 5. ruff format --check .
     assert any("ruff format --check ." in cmd for cmd in run_commands), "CI workflow must run 'ruff format --check .'"
 
-    # 6. python manage.py migrate
+    # 6. python manage.py makemigrations --check --dry-run
+    assert any("makemigrations --check --dry-run" in cmd for cmd in run_commands), (
+        "CI workflow must run 'python manage.py makemigrations --check --dry-run'"
+    )
+
+    # 7. python manage.py migrate
     assert any("python manage.py migrate" in cmd for cmd in run_commands), (
         "CI workflow must run 'python manage.py migrate'"
     )
 
-    # 7. pytest
+    # 8. pytest
     assert any("pytest" in cmd for cmd in run_commands), "CI workflow must run 'pytest'"
