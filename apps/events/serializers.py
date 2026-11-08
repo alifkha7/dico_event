@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from apps.core.serializers import DualKeyModelSerializer
 from apps.events.models import Event, EventPoster
-from apps.events.storage import validate_poster_image
+from apps.events.storage import generate_presigned_poster_url, validate_poster_image
 
 User = get_user_model()
 
@@ -73,19 +73,24 @@ class EventSerializer(DualKeyModelSerializer):
 
 
 class EventPosterSerializer(serializers.ModelSerializer):
-    """Event Poster serializer serializing id, image, and event foreign key as strings."""
+    """Event Poster serializer serializing id, image, image_url, and event foreign key as strings."""
 
     id = serializers.UUIDField(read_only=True)
     event = serializers.CharField(source="event_id", read_only=True)
+    image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = EventPoster
-        fields = ["id", "image", "event"]
+        fields = ["id", "image", "image_url", "event"]
+
+    def get_image_url(self, obj) -> str | None:
+        return generate_presigned_poster_url(getattr(obj, "image", None))
 
     def to_representation(self, instance):
         return {
             "id": str(instance.id),
             "image": str(instance.image),
+            "image_url": self.get_image_url(instance),
             "event": str(instance.event_id),
         }
 
