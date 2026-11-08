@@ -15,11 +15,11 @@ A back-office staff role authorized to manage all Users, Events, Tickets, Regist
 _Avoid_: Moderator, staff, manager
 
 **Organizer**:
-An event host role authorized to create Events and Tickets and to modify or delete only the Events they personally own.
+An event host role authorized to create Events and Tickets, modify or delete only the Events and Tickets they personally own, and view Registrations and Payments for their own Events.
 _Avoid_: Creator, vendor, promoter, host
 
 **User**:
-A standard registered participant who can browse Events and Tickets, register for Events, and submit Payments for their Registrations.
+A standard registered participant who can browse Events and Tickets, register for Events, submit Payments, and view their own Registrations and Payments.
 _Avoid_: Customer, buyer, attendee, member, account
 
 **Group**:
@@ -33,17 +33,17 @@ A scheduled gathering (such as a seminar) hosted by an Organizer at a specific l
 _Avoid_: Show, session, activity, concert
 
 **Event Poster**:
-A promotional image file (up to 500 KB) uploaded to object storage and associated with a specific Event as its visual identity.
+A promotional image uploaded to object storage and associated with a specific Event as its visual identity, exposed with a time-limited access URL for viewing.
 _Avoid_: Banner, thumbnail, attachment, cover photo
 
 **Ticket**:
-A purchasable admission category for a specific Event, defined by a name (such as VIP), price, sales window (`sales_start` to `sales_end`), and ticket quota.
+A purchasable admission category for a specific Event, defined by a name (such as VIP), price, active sales window, and ticket quota.
 _Avoid_: Pass, seat, tier, voucher
 
 **Registration**:
-A record of a User registering for a specific Ticket for an Event, which triggers an asynchronous reminder notification prior to the Event.
+A record of a User claiming one spot in a specific Ticket and its parent Event within the active sales window, which triggers an asynchronous reminder notification prior to the Event.
 _Avoid_: Booking, order, reservation, enrollment
 
 **Payment**:
-A financial settlement record linked to a Registration, capturing the payment method (such as QRIS), payment status, and amount paid.
+A financial settlement record linked to a Registration that settles the Ticket price and tracks canonical settlement states (`Pending`, `Completed`, `Failed`, `Refunded`).
 _Avoid_: Invoice, transaction, receipt, bill

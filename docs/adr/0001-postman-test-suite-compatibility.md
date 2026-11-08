@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0004
+---
+
 # Postman Test Suite Compatibility Rules
 
 To ensure 100% compatibility with both the `[788] DicoEvent versi 1` and `[788] DicoEvent versi 2` automated Postman test collections while preserving strict JWT + RBAC security on list and mutation endpoints, the API intentionally implements four specific behaviors required by the Postman test scripts:
