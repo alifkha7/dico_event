@@ -75,6 +75,14 @@ class EventSerializer(DualKeyModelSerializer):
                     {"quota": "Event quota cannot be less than the total allocated ticket quota."}
                 )
 
+            from apps.registrations.models import Registration
+
+            existing_registrations_count = Registration.objects.filter(ticket__event=self.instance).count()
+            if attrs["quota"] < existing_registrations_count:
+                raise serializers.ValidationError(
+                    {"quota": "Event quota cannot be less than the number of existing registrations."}
+                )
+
         return attrs
 
     def to_representation(self, instance):

@@ -60,7 +60,8 @@ class IsAdminOrSuperuser(permissions.BasePermission):
         return bool(is_admin_user(request.user))
 
 
-def _resolve_object_owner_id(obj, owner_field):
+def _resolve_owner_value(obj, owner_field):
+    """Resolve an owner ID string from an object attribute path using '__' or '.' traversal."""
     if not owner_field:
         return None
     val = obj
@@ -73,12 +74,15 @@ def _resolve_object_owner_id(obj, owner_field):
     return val
 
 
+_resolve_object_owner_id = _resolve_owner_value
+
+
 class RoleOwnershipPermission(permissions.BasePermission):
     """
     Declarative Role-Based Access Control and Resource Ownership permission base class.
 
     Enforces:
-    - ADR-0001 unauthenticated GET on retrieve (and configured public_actions)
+    - Public access restricted strictly to actions explicitly listed in public_actions
     - Full bypass for Superuser and Admin actors
     - Group-scoped permissions and declarative resource ownership verification
     """
@@ -89,6 +93,8 @@ class RoleOwnershipPermission(permissions.BasePermission):
     owner_field = None
     owner_roles = None
     disallow_owner_actions = ()
+    read_only_owner_roles = set()
+    read_only_owner_field = None
 
     def is_public_action(self, request, view):
         action = getattr(view, "action", None)
@@ -143,8 +149,16 @@ class RoleOwnershipPermission(permissions.BasePermission):
             if not (self.owner_roles & user_roles):
                 return False
 
-        owner_id = _resolve_object_owner_id(obj, self.owner_field)
-        if owner_id is not None:
-            return str(owner_id) == str(request.user.id)
+        owner_id = _resolve_owner_value(obj, self.owner_field)
+        if owner_id is not None and str(owner_id) == str(request.user.id):
+            return True
+
+        if request.method in permissions.SAFE_METHODS or action == "retrieve":
+            if self.read_only_owner_field and self.read_only_owner_roles:
+                user_roles = get_user_role_names(request.user)
+                if self.read_only_owner_roles & user_roles:
+                    read_only_owner_id = _resolve_owner_value(obj, self.read_only_owner_field)
+                    if read_only_owner_id is not None and str(read_only_owner_id) == str(request.user.id):
+                        return True
 
         return False

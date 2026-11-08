@@ -233,7 +233,7 @@ def test_list_registrations_organizer_and_dual_role(
     reg_ids = [r["id"] for r in response.data["registrations"]]
 
     # Must see:
-    # - sample_registration (attendee of organizer_user's event)
+    # - sample_registration (participant of organizer_user's event)
     # - organizer_personal_reg (organizer_user's personal participation)
     assert str(sample_registration.id) in reg_ids
     assert str(organizer_personal_reg.id) in reg_ids
@@ -691,3 +691,73 @@ def test_registration_intake_locks_ticket_and_event_with_select_for_update(sampl
         assert mock_event_lock.called
         assert registration.ticket == sample_ticket
         assert registration.user == regular_user
+
+
+@pytest.mark.django_db
+def test_update_registration_after_sales_end_unchanged_ticket_succeeds_and_changed_ticket_fails(
+    api_client, regular_user, organizer_user, get_auth_header
+):
+    """
+    Verify updating a registration after sales_end succeeds when ticket is unchanged (200 OK),
+    whereas changing the ticket to a closed-window ticket fails with 400 Bad Request.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from apps.events.models import Event
+
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Past Sales Window Event",
+        description="Event whose tickets sales window just closed",
+        location="Online",
+        start_time=now + timedelta(days=2),
+        end_time=now + timedelta(days=3),
+        status="published",
+        quota=100,
+        category="Tech",
+        organizer=organizer_user,
+    )
+
+    ticket_expired = Ticket.objects.create(
+        event=event,
+        name="Expired Ticket",
+        price=10000,
+        sales_start=now - timedelta(days=5),
+        sales_end=now - timedelta(hours=1),  # sales ended 1 hour ago
+        quota=50,
+    )
+
+    ticket_another_expired = Ticket.objects.create(
+        event=event,
+        name="Another Expired Ticket",
+        price=20000,
+        sales_start=now - timedelta(days=5),
+        sales_end=now - timedelta(hours=2),  # sales ended 2 hours ago
+        quota=50,
+    )
+
+    # Pre-create registration before sales ended
+    registration = Registration.objects.create(ticket=ticket_expired, user=regular_user)
+
+    headers = get_auth_header(regular_user)
+
+    # 1. Update registration with ticket unchanged (e.g. resubmitting same ticket_id) -> must succeed 200 OK
+    res_unchanged = api_client.put(
+        f"/api/registrations/{registration.id}/",
+        {"ticket_id": str(ticket_expired.id)},
+        format="json",
+        **headers,
+    )
+    assert res_unchanged.status_code == status.HTTP_200_OK
+    assert res_unchanged.data["ticket"] == str(ticket_expired.id)
+
+    # 2. Update registration changing to another expired ticket -> must fail with 400 Bad Request
+    res_changed_expired = api_client.put(
+        f"/api/registrations/{registration.id}/",
+        {"ticket_id": str(ticket_another_expired.id)},
+        format="json",
+        **headers,
+    )
+    assert res_changed_expired.status_code == status.HTTP_400_BAD_REQUEST
+    assert "ticket" in res_changed_expired.data
+    assert "sales window" in str(res_changed_expired.data["ticket"]).lower()

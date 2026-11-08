@@ -478,3 +478,54 @@ def test_update_event_quota_below_allocated_ticket_quota_rejected(
     res_ok = api_client.patch(f"/api/events/{event_id}/", {"quota": 350}, format="json", **headers)
     assert res_ok.status_code == status.HTTP_200_OK
     assert res_ok.data["quota"] == 350
+
+
+@pytest.mark.django_db
+def test_update_event_quota_below_existing_registrations_rejected(
+    api_client, organizer_user, regular_user, get_auth_header, sample_event_data
+):
+    """
+    Verify decreasing event quota below count of existing registrations
+    across all tickets of the event is rejected with 400 Bad Request.
+    """
+    from apps.registrations.models import Registration
+    from apps.tickets.models import Ticket
+
+    res_create = api_client.post("/api/events/", sample_event_data, format="json", **get_auth_header(organizer_user))
+    assert res_create.status_code == status.HTTP_201_CREATED
+    event_id = res_create.data["id"]
+
+    now = datetime.now(timezone.utc)
+    ticket = Ticket.objects.create(
+        event_id=event_id,
+        name="Conference Pass",
+        price=100000,
+        sales_start=now - timedelta(days=2),
+        sales_end=now + timedelta(days=2),
+        quota=20,
+    )
+
+    # Create 3 registrations for this ticket
+    Registration.objects.create(ticket=ticket, user=regular_user)
+    user2 = User.objects.create_user(username="participant_2", email="part2@dicoevent.com", password="password123")
+    Registration.objects.create(ticket=ticket, user=user2)
+    user3 = User.objects.create_user(username="participant_3", email="part3@dicoevent.com", password="password123")
+    Registration.objects.create(ticket=ticket, user=user3)
+
+    # Suppose ticket quota is reduced to 2 (simulating quota change or lower ticket quota)
+    # Total allocated ticket quota is now 2, but 3 registrations exist
+    ticket.quota = 2
+    ticket.save()
+
+    headers = get_auth_header(organizer_user)
+
+    # Attempt to set event quota to 2 (< 3 existing registrations) -> must fail with 400
+    res_fail = api_client.patch(f"/api/events/{event_id}/", {"quota": 2}, format="json", **headers)
+    assert res_fail.status_code == status.HTTP_400_BAD_REQUEST
+    assert "quota" in res_fail.data
+    assert "existing registrations" in str(res_fail.data["quota"]).lower()
+
+    # Updating event quota to 3 (>= 3 existing registrations) -> must succeed with 200 OK
+    res_ok = api_client.patch(f"/api/events/{event_id}/", {"quota": 3}, format="json", **headers)
+    assert res_ok.status_code == status.HTTP_200_OK
+    assert res_ok.data["quota"] == 3

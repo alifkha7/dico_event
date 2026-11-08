@@ -1,7 +1,7 @@
 import os
 
 from .base import *  # noqa: F403
-from .base import CORS_ALLOWED_ORIGINS, MIDDLEWARE
+from .base import CORS_ALLOWED_ORIGINS, MIDDLEWARE, configure_silk_middleware
 
 DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
 
@@ -12,9 +12,7 @@ else:
     ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "testserver"]
 
 ENABLE_SILK = os.environ.get("ENABLE_SILK", "True").lower() in ("true", "1", "yes")
-
-if ENABLE_SILK and "silk.middleware.SilkyMiddleware" not in MIDDLEWARE:
-    MIDDLEWARE = ["silk.middleware.SilkyMiddleware"] + [m for m in MIDDLEWARE if m != "silk.middleware.SilkyMiddleware"]
+MIDDLEWARE = configure_silk_middleware(ENABLE_SILK, MIDDLEWARE)
 
 if not CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS = [
