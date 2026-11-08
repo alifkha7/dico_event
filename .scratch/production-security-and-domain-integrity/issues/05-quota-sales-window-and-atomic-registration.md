@@ -4,7 +4,7 @@
 
 **Blocked by:** 04: Relational Audit Protection (`PROTECT`) and `409 Conflict` Deletion Guards
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Creating or updating a `Ticket` is rejected with `400 Bad Request` if the sum of all `Ticket` quotas for that `Event` would exceed `Event.quota`, and updating an `Event`'s `quota` is rejected with `400 Bad Request` if the new `Event.quota` is less than the sum of its existing `Ticket` quotas.
 - [ ] A database `UniqueConstraint` on `(ticket, user)` prevents a `User` from creating more than one `Registration` for the same `Ticket`, returning `400 Bad Request` on duplicate attempts.

@@ -4,7 +4,7 @@
 
 **Blocked by:** 04: Relational Audit Protection (`PROTECT`) and `409 Conflict` Deletion Guards
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Creating or updating a `Payment` requires `amount_paid` to equal the associated `Ticket.price` (including `amount_paid == 0` when `Ticket.price == 0`), rejecting any mismatch with `400 Bad Request`.
 - [ ] `payment_status` is validated and normalized case-insensitively against `Pending`, `Completed`, `Failed`, and `Refunded`, rejecting unknown status strings with `400 Bad Request`.
