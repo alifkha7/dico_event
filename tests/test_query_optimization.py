@@ -469,7 +469,7 @@ def test_payment_update_object_permission_query_efficiency(api_client, regular_u
         amount_paid=10000,
     )
 
-    update_payload = {"payment_status": "Completed"}
+    update_payload = {"payment_method": "Credit Card"}
     with CaptureQueriesContext(connection) as ctx:
         res = api_client.put(f"/api/payments/{payment.id}/", update_payload, format="json", **headers)
 
