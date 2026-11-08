@@ -58,7 +58,7 @@ def sample_ticket(organizer_user):
         event=event,
         name="General Admission",
         price=100000,
-        sales_start=now,
+        sales_start=now - timedelta(days=1),
         sales_end=now + timedelta(days=4),
         quota=100,
     )
@@ -265,7 +265,7 @@ def test_list_payments_organizer_and_dual_role(
         event=other_event,
         name="Standard",
         price=50000,
-        sales_start=now,
+        sales_start=now - timedelta(days=1),
         sales_end=now + timedelta(days=5),
         quota=50,
     )

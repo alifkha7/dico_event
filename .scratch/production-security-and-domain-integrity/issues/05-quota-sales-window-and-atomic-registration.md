@@ -4,10 +4,10 @@
 
 **Blocked by:** 04: Relational Audit Protection (`PROTECT`) and `409 Conflict` Deletion Guards
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] Creating or updating a `Ticket` is rejected with `400 Bad Request` if the sum of all `Ticket` quotas for that `Event` would exceed `Event.quota`, and updating an `Event`'s `quota` is rejected with `400 Bad Request` if the new `Event.quota` is less than the sum of its existing `Ticket` quotas.
-- [ ] A database `UniqueConstraint` on `(ticket, user)` prevents a `User` from creating more than one `Registration` for the same `Ticket`, returning `400 Bad Request` on duplicate attempts.
-- [ ] Creating a `Registration` when the current timestamp is before `Ticket.sales_start` or after `Ticket.sales_end` is rejected with `400 Bad Request`.
-- [ ] Creating a `Registration` locks the target `Ticket` and parent `Event` rows inside an atomic transaction (`select_for_update()`) and rejects the request with `400 Bad Request` when existing registrations for that `Ticket` have reached `Ticket.quota` or total registrations across the `Event` have reached `Event.quota`.
-- [ ] Automated HTTP API tests verify `Ticket`/`Event` quota sum allocation, sales window boundaries, duplicate `(User, Ticket)` rejection, and quota exhaustion enforcement.
+- [x] Creating or updating a `Ticket` is rejected with `400 Bad Request` if the sum of all `Ticket` quotas for that `Event` would exceed `Event.quota`, and updating an `Event`'s `quota` is rejected with `400 Bad Request` if the new `Event.quota` is less than the sum of its existing `Ticket` quotas.
+- [x] A database `UniqueConstraint` on `(ticket, user)` prevents a `User` from creating more than one `Registration` for the same `Ticket`, returning `400 Bad Request` on duplicate attempts.
+- [x] Creating a `Registration` when the current timestamp is before `Ticket.sales_start` or after `Ticket.sales_end` is rejected with `400 Bad Request`.
+- [x] Creating a `Registration` locks the target `Ticket` and parent `Event` rows inside an atomic transaction (`select_for_update()`) and rejects the request with `400 Bad Request` when existing registrations for that `Ticket` have reached `Ticket.quota` or total registrations across the `Event` have reached `Event.quota`.
+- [x] Automated HTTP API tests verify `Ticket`/`Event` quota sum allocation, sales window boundaries, duplicate `(User, Ticket)` rejection, and quota exhaustion enforcement.

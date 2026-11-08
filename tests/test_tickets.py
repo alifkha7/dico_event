@@ -410,3 +410,78 @@ def test_delete_ticket_regular_user_forbidden(api_client, regular_user, get_auth
     headers = get_auth_header(regular_user)
     response = api_client.delete(f"/api/tickets/{sample_ticket.id}/", **headers)
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ==========================================
+# 6. Ticket Quota Allocation Validation (SUM(Ticket.quota) <= Event.quota)
+# ==========================================
+
+
+@pytest.mark.django_db
+def test_create_ticket_exceeding_event_quota_rejected(api_client, organizer_user, get_auth_header, sample_event):
+    """Verify ticket creation is rejected (400) if sum of ticket quotas exceeds Event.quota."""
+    now = datetime.now(timezone.utc)
+    # Event quota is 200. Existing ticket takes 150.
+    Ticket.objects.create(
+        event=sample_event,
+        name="Existing Ticket",
+        price=50000,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=4),
+        quota=150,
+    )
+    headers = get_auth_header(organizer_user)
+    # Attempting to add 60 more (150 + 60 = 210 > 200)
+    payload = {
+        "event_id": str(sample_event.id),
+        "name": "Excess Ticket",
+        "price": 60000,
+        "sales_start": (now - timedelta(days=1)).isoformat(),
+        "sales_end": (now + timedelta(days=4)).isoformat(),
+        "quota": 60,
+    }
+    response = api_client.post("/api/tickets/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "quota" in response.data
+    assert "cannot exceed" in str(response.data["quota"]).lower()
+
+    # Adding remaining quota 50 (150 + 50 = 200 <= 200) should succeed
+    payload["quota"] = 50
+    res_ok = api_client.post("/api/tickets/", payload, format="json", **headers)
+    assert res_ok.status_code == status.HTTP_201_CREATED
+    assert res_ok.data["quota"] == 50
+
+
+@pytest.mark.django_db
+def test_update_ticket_quota_exceeding_event_quota_rejected(api_client, organizer_user, get_auth_header, sample_event):
+    """Verify updating ticket quota is rejected (400) if new sum exceeds Event.quota."""
+    now = datetime.now(timezone.utc)
+    # Event quota is 200. Ticket 1: 100, Ticket 2: 80 (sum = 180)
+    Ticket.objects.create(
+        event=sample_event,
+        name="Ticket 1",
+        price=50000,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=4),
+        quota=100,
+    )
+    ticket_2 = Ticket.objects.create(
+        event=sample_event,
+        name="Ticket 2",
+        price=50000,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=4),
+        quota=80,
+    )
+    headers = get_auth_header(organizer_user)
+
+    # Updating ticket 2 to quota 120 (100 + 120 = 220 > 200) should fail
+    res_fail = api_client.patch(f"/api/tickets/{ticket_2.id}/", {"quota": 120}, format="json", **headers)
+    assert res_fail.status_code == status.HTTP_400_BAD_REQUEST
+    assert "quota" in res_fail.data
+
+    # Updating ticket 2 to quota 100 (100 + 100 = 200 <= 200) should succeed
+    res_ok = api_client.patch(f"/api/tickets/{ticket_2.id}/", {"quota": 100}, format="json", **headers)
+    assert res_ok.status_code == status.HTTP_200_OK
+    ticket_2.refresh_from_db()
+    assert ticket_2.quota == 100

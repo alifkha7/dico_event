@@ -15,6 +15,9 @@ class Registration(models.Model):
         db_table = "registrations"
         verbose_name = "Registration"
         verbose_name_plural = "Registrations"
+        constraints = [
+            models.UniqueConstraint(fields=["ticket", "user"], name="unique_ticket_user_registration"),
+        ]
 
     @property
     def event(self):
