@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Milestone Tag, Modular Environment Settings (`base`, `dev`, `prod`, `test`), and CORS Whitelisting
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] Unauthenticated `GET` requests to `Event` list/detail, `Event Poster` list, and `Ticket` list/detail remain publicly accessible (`200 OK`), while unauthenticated `GET` requests to `User`, `Registration`, and `Payment` list or detail endpoints are rejected with `401 Unauthorized`.
-- [ ] An authenticated `User` can `GET` and `PUT`/`PATCH` their own `User` detail endpoint (`200 OK`), is rejected with `403 Forbidden` when attempting to `GET`, `PUT`, `PATCH`, or `DELETE` another `User` or list all `User`s, while `Admin` and `Superuser` actors can list and retrieve all `User` profiles.
-- [ ] An authenticated `User` calling `GET /api/registrations/`, `GET /api/registrations/<id>/`, `GET /api/payments/`, or `GET /api/payments/<id>/` receives only their own `Registration` and `Payment` records and is denied access to other participants' records (`404 Not Found` or `403 Forbidden`).
-- [ ] An `Organizer` calling `GET /api/registrations/`, `GET /api/registrations/<id>/`, `GET /api/payments/`, or `GET /api/payments/<id>/` receives read-only visibility into `Registration` and `Payment` records belonging to `Event`s they personally own, and receives the union of their owned-`Event` records and their personal participant records when they also register/pay as a `User` on another host's `Event`.
-- [ ] An `Organizer` attempting to `PUT`, `PATCH`, or `DELETE` another participant's `Registration` or `Payment` on their `Event` is rejected with `403 Forbidden`, whereas `Admin` and `Superuser` actors retain full platform-wide visibility and management access.
-- [ ] All scoped `Registration` and `Payment` list and detail endpoints maintain constant `O(1)` SQL query counts under `django_assert_num_queries` verification.
+- [x] Unauthenticated `GET` requests to `Event` list/detail, `Event Poster` list, and `Ticket` list/detail remain publicly accessible (`200 OK`), while unauthenticated `GET` requests to `User`, `Registration`, and `Payment` list or detail endpoints are rejected with `401 Unauthorized`.
+- [x] An authenticated `User` can `GET` and `PUT`/`PATCH` their own `User` detail endpoint (`200 OK`), is rejected with `403 Forbidden` when attempting to `GET`, `PUT`, `PATCH`, or `DELETE` another `User` or list all `User`s, while `Admin` and `Superuser` actors can list and retrieve all `User` profiles.
+- [x] An authenticated `User` calling `GET /api/registrations/`, `GET /api/registrations/<id>/`, `GET /api/payments/`, or `GET /api/payments/<id>/` receives only their own `Registration` and `Payment` records and is denied access to other participants' records (`404 Not Found` or `403 Forbidden`).
+- [x] An `Organizer` calling `GET /api/registrations/`, `GET /api/registrations/<id>/`, `GET /api/payments/`, or `GET /api/payments/<id>/` receives read-only visibility into `Registration` and `Payment` records belonging to `Event`s they personally own, and receives the union of their owned-`Event` records and their personal participant records when they also register/pay as a `User` on another host's `Event`.
+- [x] An `Organizer` attempting to `PUT`, `PATCH`, or `DELETE` another participant's `Registration` or `Payment` on their `Event` is rejected with `403 Forbidden`, whereas `Admin` and `Superuser` actors retain full platform-wide visibility and management access.
+- [x] All scoped `Registration` and `Payment` list and detail endpoints maintain constant `O(1)` SQL query counts under `django_assert_num_queries` verification.

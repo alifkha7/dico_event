@@ -165,21 +165,30 @@ def test_is_superuser_permission(superuser, regular_user):
 
 @pytest.mark.django_db
 def test_role_ownership_permission_lifecycle(admin_user, organizer_user, regular_user):
-    """Verify RoleOwnershipPermission enforces ADR-0001 unauthenticated retrieve, bypass, and ownership."""
+    """
+    Verify RoleOwnershipPermission requires explicit public_actions,
+    denies unauthenticated retrieve by default, and enforces ownership.
+    """
     perm = RoleOwnershipPermission()
     perm.owner_field = "organizer_id"
     perm.owner_roles = {"organizer"}
 
     factory = APIRequestFactory()
 
-    # 1. Unauthenticated GET retrieve allows access per ADR-0001
+    # 1. Default RoleOwnershipPermission has public_actions = () and denies unauthenticated retrieve
     request = factory.get("/api/items/123/")
     request.user = AnonymousUser()
     view = MagicMock(action="retrieve")
     dummy_obj = MagicMock(organizer_id=str(organizer_user.id))
 
+    assert perm.has_permission(request, view) is False
+    assert perm.has_object_permission(request, view, dummy_obj) is False
+
+    # 1b. When public_actions explicitly contains "retrieve", unauthenticated retrieve is allowed
+    perm.public_actions = ("retrieve",)
     assert perm.has_permission(request, view) is True
     assert perm.has_object_permission(request, view, dummy_obj) is True
+    perm.public_actions = ()
 
     # 2. Unauthenticated GET list is forbidden
     view.action = "list"

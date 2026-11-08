@@ -210,11 +210,98 @@ def test_list_payments_no_trailing_slash(api_client, admin_user, get_auth_header
 
 
 @pytest.mark.django_db
-def test_list_payments_regular_user_forbidden(api_client, regular_user, get_auth_header, sample_payment):
-    """Verify standard User cannot list payments (403 Forbidden)."""
+def test_list_payments_regular_user_scoped(
+    api_client, regular_user, another_regular_user, sample_ticket, get_auth_header, sample_payment
+):
+    """Verify standard User can list payments and sees only their own payments (scoped 200 OK)."""
+    # Create another user's registration and payment
+    other_reg = Registration.objects.create(ticket=sample_ticket, user=another_regular_user)
+    other_payment = Payment.objects.create(
+        registration=other_reg,
+        payment_method="GoPay",
+        payment_status="Completed",
+        amount_paid=100000,
+    )
+
     headers = get_auth_header(regular_user)
     response = api_client.get("/api/payments/", **headers)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_200_OK
+    assert "payments" in response.data
+    pay_ids = [p["id"] for p in response.data["payments"]]
+    assert str(sample_payment.id) in pay_ids
+    assert str(other_payment.id) not in pay_ids
+
+
+@pytest.mark.django_db
+def test_list_payments_organizer_and_dual_role(
+    api_client, organizer_user, another_regular_user, sample_ticket, get_auth_header, sample_payment
+):
+    """
+    Verify Organizer lists payments for events they own, and when acting in dual roles
+    (Organizer + User paying for another organizer's event), receives the union of both scopes.
+    """
+    from django.contrib.auth.models import Group
+
+    # Create another organizer and their event/ticket/registration/payment
+    organizer_group, _ = Group.objects.get_or_create(name="organizer")
+    other_organizer = User.objects.create_user(
+        username="other_org_pay", email="other_org_pay@dicoevent.com", password="password123"
+    )
+    other_organizer.groups.add(organizer_group)
+
+    now = datetime.now(timezone.utc)
+    other_event = Event.objects.create(
+        name="Other Org Pay Event",
+        description="Event by other organizer",
+        location="Surabaya",
+        start_time=now + timedelta(days=7),
+        end_time=now + timedelta(days=8),
+        status="published",
+        quota=100,
+        category="Tech",
+        organizer=other_organizer,
+    )
+    other_ticket = Ticket.objects.create(
+        event=other_event,
+        name="Standard",
+        price=50000,
+        sales_start=now,
+        sales_end=now + timedelta(days=5),
+        quota=50,
+    )
+
+    # 1. Payment for another organizer's event by another participant (should NOT be visible)
+    other_participant_reg = Registration.objects.create(ticket=other_ticket, user=another_regular_user)
+    other_participant_payment = Payment.objects.create(
+        registration=other_participant_reg,
+        payment_method="GoPay",
+        payment_status="Completed",
+        amount_paid=50000,
+    )
+
+    # 2. Payment for another organizer's event where organizer_user participates as a User
+    organizer_personal_reg = Registration.objects.create(ticket=other_ticket, user=organizer_user)
+    organizer_personal_payment = Payment.objects.create(
+        registration=organizer_personal_reg,
+        payment_method="Credit Card",
+        payment_status="Completed",
+        amount_paid=50000,
+    )
+
+    # Call GET /api/payments/ as organizer_user
+    headers = get_auth_header(organizer_user)
+    response = api_client.get("/api/payments/", **headers)
+    assert response.status_code == status.HTTP_200_OK
+    pay_ids = [p["id"] for p in response.data["payments"]]
+
+    # Must see:
+    # - sample_payment (attendee payment for organizer_user's event)
+    # - organizer_personal_payment (organizer_user's personal payment)
+    assert str(sample_payment.id) in pay_ids
+    assert str(organizer_personal_payment.id) in pay_ids
+    # Must NOT see:
+    # - other_participant_payment (unrelated event participant)
+    assert str(other_participant_payment.id) not in pay_ids
 
 
 @pytest.mark.django_db
@@ -230,31 +317,99 @@ def test_list_payments_unauthenticated(api_client, sample_payment):
 
 
 @pytest.mark.django_db
-def test_retrieve_payment_allow_any(api_client, sample_payment):
-    """Verify unauthenticated GET /api/payments/<id>/ returns 200 OK per ADR-0001."""
+def test_retrieve_payment_unauthenticated_unauthorized(api_client, sample_payment):
+    """Verify unauthenticated GET /api/payments/<id>/ returns 401 Unauthorized."""
     response = api_client.get(f"/api/payments/{sample_payment.id}/")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_retrieve_payment_no_trailing_slash_unauthenticated(api_client, sample_payment):
+    """Verify unauthenticated GET /api/payments/<id> returns 401 Unauthorized without trailing slash."""
+    response = api_client.get(f"/api/payments/{sample_payment.id}")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_retrieve_payment_owner(api_client, regular_user, get_auth_header, sample_payment):
+    """Verify owner User can retrieve their own payment (200 OK)."""
+    headers = get_auth_header(regular_user)
+    response = api_client.get(f"/api/payments/{sample_payment.id}/", **headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.data["id"] == str(sample_payment.id)
     assert response.data["registration"] == str(sample_payment.registration_id)
-    assert response.data["registration_id"] == str(sample_payment.registration_id)
-    assert response.data["payment_method"] == sample_payment.payment_method
     assert response.data["payment_status"] == sample_payment.payment_status
-    assert response.data["amount_paid"] == sample_payment.amount_paid
 
 
 @pytest.mark.django_db
-def test_retrieve_payment_no_trailing_slash(api_client, sample_payment):
-    """Verify unauthenticated GET /api/payments/<id> works without trailing slash per ADR-0001."""
-    response = api_client.get(f"/api/payments/{sample_payment.id}")
+def test_retrieve_payment_other_user_forbidden(api_client, another_regular_user, get_auth_header, sample_payment):
+    """Verify non-owner User cannot retrieve another user's payment (403 Forbidden)."""
+    headers = get_auth_header(another_regular_user)
+    response = api_client.get(f"/api/payments/{sample_payment.id}/", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_retrieve_payment_organizer_owner(api_client, organizer_user, get_auth_header, sample_payment):
+    """Verify Organizer can retrieve payment for an event they personally own (200 OK)."""
+    headers = get_auth_header(organizer_user)
+    response = api_client.get(f"/api/payments/{sample_payment.id}/", **headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.data["id"] == str(sample_payment.id)
 
 
 @pytest.mark.django_db
-def test_retrieve_payment_not_found(api_client):
-    """Verify GET /api/payments/<nonexistent_id>/ returns 404 Not Found."""
+def test_retrieve_payment_other_organizer_forbidden(api_client, sample_payment, get_auth_header):
+    """Verify an Organizer cannot retrieve a payment for an event owned by another Organizer (403 Forbidden)."""
+    from django.contrib.auth.models import Group
+
+    organizer_group, _ = Group.objects.get_or_create(name="organizer")
+    other_organizer = User.objects.create_user(
+        username="unrelated_org_pay", email="unrelated_org_pay@dicoevent.com", password="password123"
+    )
+    other_organizer.groups.add(organizer_group)
+
+    headers = get_auth_header(other_organizer)
+    response = api_client.get(f"/api/payments/{sample_payment.id}/", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_organizer_cannot_modify_or_delete_participant_payment(
+    api_client, organizer_user, get_auth_header, sample_payment
+):
+    """Verify Organizer attempting to PUT/PATCH or DELETE a participant's payment receives 403 Forbidden."""
+    headers = get_auth_header(organizer_user)
+
+    # Attempt PUT
+    put_res = api_client.put(
+        f"/api/payments/{sample_payment.id}/",
+        {"amount_paid": 100000},
+        format="json",
+        **headers,
+    )
+    assert put_res.status_code == status.HTTP_403_FORBIDDEN
+
+    # Attempt PATCH
+    patch_res = api_client.patch(
+        f"/api/payments/{sample_payment.id}/",
+        {"payment_method": "GoPay"},
+        format="json",
+        **headers,
+    )
+    assert patch_res.status_code == status.HTTP_403_FORBIDDEN
+
+    # Attempt DELETE
+    del_res = api_client.delete(f"/api/payments/{sample_payment.id}/", **headers)
+    assert del_res.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_retrieve_payment_not_found(api_client, superuser, get_auth_header):
+    """Verify GET /api/payments/<nonexistent_id>/ returns 404 Not Found for authorized actor."""
+    headers = get_auth_header(superuser)
     random_id = uuid.uuid4()
-    response = api_client.get(f"/api/payments/{random_id}/")
+    response = api_client.get(f"/api/payments/{random_id}/", **headers)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -324,7 +479,7 @@ def test_delete_payment_owner_and_subsequent_404(api_client, regular_user, get_a
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
     # Subsequent GET returns 404
-    get_res = api_client.get(f"/api/payments/{payment_id}/")
+    get_res = api_client.get(f"/api/payments/{payment_id}/", **headers)
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
 

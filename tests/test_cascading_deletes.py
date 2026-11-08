@@ -60,13 +60,14 @@ def test_cascading_delete_ticket_to_registration_and_payment_adr_0001(
     registration_id = str(registration.id)
     payment_id = str(payment.id)
 
+    headers = get_auth_header(superuser)
+
     # Verify they exist
     assert api_client.get(f"/api/tickets/{ticket_id}/").status_code == status.HTTP_200_OK
-    assert api_client.get(f"/api/registrations/{registration_id}/").status_code == status.HTTP_200_OK
-    assert api_client.get(f"/api/payments/{payment_id}/").status_code == status.HTTP_200_OK
+    assert api_client.get(f"/api/registrations/{registration_id}/", **headers).status_code == status.HTTP_200_OK
+    assert api_client.get(f"/api/payments/{payment_id}/", **headers).status_code == status.HTTP_200_OK
 
     # Superuser deletes the Ticket
-    headers = get_auth_header(superuser)
     del_res = api_client.delete(f"/api/tickets/{ticket_id}/", **headers)
     assert del_res.status_code == status.HTTP_204_NO_CONTENT
 
@@ -75,12 +76,12 @@ def test_cascading_delete_ticket_to_registration_and_payment_adr_0001(
     assert api_client.get(f"/api/tickets/{ticket_id}").status_code == status.HTTP_404_NOT_FOUND
 
     # Verify registration returns 404 with and without trailing slash
-    assert api_client.get(f"/api/registrations/{registration_id}/").status_code == status.HTTP_404_NOT_FOUND
-    assert api_client.get(f"/api/registrations/{registration_id}").status_code == status.HTTP_404_NOT_FOUND
+    assert api_client.get(f"/api/registrations/{registration_id}/", **headers).status_code == status.HTTP_404_NOT_FOUND
+    assert api_client.get(f"/api/registrations/{registration_id}", **headers).status_code == status.HTTP_404_NOT_FOUND
 
     # Verify payment returns 404 with and without trailing slash per ADR-0001
-    assert api_client.get(f"/api/payments/{payment_id}/").status_code == status.HTTP_404_NOT_FOUND
-    assert api_client.get(f"/api/payments/{payment_id}").status_code == status.HTTP_404_NOT_FOUND
+    assert api_client.get(f"/api/payments/{payment_id}/", **headers).status_code == status.HTTP_404_NOT_FOUND
+    assert api_client.get(f"/api/payments/{payment_id}", **headers).status_code == status.HTTP_404_NOT_FOUND
 
     # Verify DB rows are actually gone
     assert not Ticket.objects.filter(id=ticket.id).exists()

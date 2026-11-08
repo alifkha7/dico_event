@@ -1,9 +1,11 @@
+from django.db.models import Q
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from loguru import logger
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 
 from apps.core.mixins import PartialUpdateMixin
+from apps.core.permissions import is_admin_user, is_organizer_user
 
 from .models import Payment
 from .permissions import PaymentViewSetPermission
@@ -16,10 +18,12 @@ __all__ = ["PaymentViewSet"]
     list=extend_schema(
         description=(
             "List all Payments wrapped in a payments envelope with constant O(1) query "
-            "eager-loading (Admin and Superuser only)."
+            "eager-loading (scoped to own payments for User, and owned events for Organizer)."
         )
     ),
-    retrieve=extend_schema(description="Retrieve Payment details by ID (unauthenticated public access per ADR-0001)."),
+    retrieve=extend_schema(
+        description="Retrieve Payment details by ID (User owner, event Organizer, Admin, or Superuser)."
+    ),
     create=extend_schema(
         description=("Create a Payment settlement for a Registration by an authenticated User, Admin, or Superuser.")
     ),
@@ -39,14 +43,54 @@ __all__ = ["PaymentViewSet"]
 class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     """
     Payment ViewSet managing financial settlements and status normalization:
-    - Eager-loading registration and registration__user for constant O(1) query performance
+    - Eager-loading registration, registration__user, registration__ticket, registration__ticket__event,
+      and registration__ticket__event__organizer for constant O(1) query performance
     - Normalization of case-insensitive 'completed' to 'Completed' (ADR-0001)
-    - Declarative User ownership and ADR-0001 unauthenticated detail retrieve permissions
+    - Scoped RBAC visibility for User, Organizer, and Admin roles
     """
 
-    queryset = Payment.objects.select_related("registration", "registration__user").all().order_by("id")
+    queryset = (
+        Payment.objects.select_related(
+            "registration",
+            "registration__user",
+            "registration__ticket",
+            "registration__ticket__event",
+            "registration__ticket__event__organizer",
+        )
+        .all()
+        .order_by("id")
+    )
     serializer_class = PaymentSerializer
     permission_classes = [PaymentViewSetPermission]
+
+    def get_queryset(self):
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return Payment.objects.none()
+
+        base_qs = (
+            Payment.objects.select_related(
+                "registration",
+                "registration__user",
+                "registration__ticket",
+                "registration__ticket__event",
+                "registration__ticket__event__organizer",
+            )
+            .all()
+            .order_by("id")
+        )
+        if is_admin_user(user):
+            return base_qs
+
+        action = getattr(self, "action", None)
+        if action == "list":
+            if is_organizer_user(user):
+                return base_qs.filter(
+                    Q(registration__user=user) | Q(registration__ticket__event__organizer=user)
+                ).distinct()
+            return base_qs.filter(registration__user=user)
+
+        return base_qs
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())

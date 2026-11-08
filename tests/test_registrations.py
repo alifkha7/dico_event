@@ -166,11 +166,80 @@ def test_list_registrations_no_trailing_slash(api_client, admin_user, get_auth_h
 
 
 @pytest.mark.django_db
-def test_list_registrations_regular_user_forbidden(api_client, regular_user, get_auth_header, sample_registration):
-    """Verify standard User cannot list registrations (403 Forbidden)."""
+def test_list_registrations_regular_user_scoped(
+    api_client, regular_user, another_regular_user, sample_ticket, get_auth_header, sample_registration
+):
+    """Verify standard User can list registrations and sees only their own registrations (scoped 200 OK)."""
+    # Create another user's registration
+    other_reg = Registration.objects.create(ticket=sample_ticket, user=another_regular_user)
+
     headers = get_auth_header(regular_user)
     response = api_client.get("/api/registrations/", **headers)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_200_OK
+    assert "registrations" in response.data
+    reg_ids = [r["id"] for r in response.data["registrations"]]
+    assert str(sample_registration.id) in reg_ids
+    assert str(other_reg.id) not in reg_ids
+
+
+@pytest.mark.django_db
+def test_list_registrations_organizer_and_dual_role(
+    api_client, organizer_user, another_regular_user, sample_ticket, get_auth_header, sample_registration
+):
+    """
+    Verify Organizer lists registrations for events they own, and when acting in dual roles
+    (Organizer + User registered for another organizer's event), receives the union of both scopes.
+    """
+    from django.contrib.auth.models import Group
+
+    # Create another organizer and their event/ticket
+    organizer_group, _ = Group.objects.get_or_create(name="organizer")
+    other_organizer = User.objects.create_user(
+        username="other_org", email="other_org@dicoevent.com", password="password123"
+    )
+    other_organizer.groups.add(organizer_group)
+
+    now = datetime.now(timezone.utc)
+    other_event = Event.objects.create(
+        name="Other Org Event",
+        description="Event by other organizer",
+        location="Bandung",
+        start_time=now + timedelta(days=7),
+        end_time=now + timedelta(days=8),
+        status="published",
+        quota=100,
+        category="Tech",
+        organizer=other_organizer,
+    )
+    other_ticket = Ticket.objects.create(
+        event=other_event,
+        name="Standard",
+        price=50000,
+        sales_start=now,
+        sales_end=now + timedelta(days=5),
+        quota=50,
+    )
+
+    # 1. Registration for another organizer's event by another participant (should NOT be visible)
+    other_participant_reg = Registration.objects.create(ticket=other_ticket, user=another_regular_user)
+
+    # 2. Registration for another organizer's event where organizer_user participates as a User
+    organizer_personal_reg = Registration.objects.create(ticket=other_ticket, user=organizer_user)
+
+    # Call GET /api/registrations/ as organizer_user
+    headers = get_auth_header(organizer_user)
+    response = api_client.get("/api/registrations/", **headers)
+    assert response.status_code == status.HTTP_200_OK
+    reg_ids = [r["id"] for r in response.data["registrations"]]
+
+    # Must see:
+    # - sample_registration (attendee of organizer_user's event)
+    # - organizer_personal_reg (organizer_user's personal participation)
+    assert str(sample_registration.id) in reg_ids
+    assert str(organizer_personal_reg.id) in reg_ids
+    # Must NOT see:
+    # - other_participant_reg (unrelated event participant)
+    assert str(other_participant_reg.id) not in reg_ids
 
 
 @pytest.mark.django_db
@@ -186,9 +255,24 @@ def test_list_registrations_unauthenticated(api_client, sample_registration):
 
 
 @pytest.mark.django_db
-def test_retrieve_registration_allow_any(api_client, sample_registration):
-    """Verify unauthenticated GET /api/registrations/<id>/ returns 200 OK per ADR-0001."""
+def test_retrieve_registration_unauthenticated_unauthorized(api_client, sample_registration):
+    """Verify unauthenticated GET /api/registrations/<id>/ returns 401 Unauthorized."""
     response = api_client.get(f"/api/registrations/{sample_registration.id}/")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_retrieve_registration_no_trailing_slash_unauthenticated(api_client, sample_registration):
+    """Verify unauthenticated GET /api/registrations/<id> returns 401 Unauthorized without trailing slash."""
+    response = api_client.get(f"/api/registrations/{sample_registration.id}")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_retrieve_registration_owner(api_client, regular_user, get_auth_header, sample_registration):
+    """Verify owning User can retrieve their own registration (200 OK)."""
+    headers = get_auth_header(regular_user)
+    response = api_client.get(f"/api/registrations/{sample_registration.id}/", **headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.data["id"] == str(sample_registration.id)
     assert response.data["ticket"] == str(sample_registration.ticket_id)
@@ -196,18 +280,76 @@ def test_retrieve_registration_allow_any(api_client, sample_registration):
 
 
 @pytest.mark.django_db
-def test_retrieve_registration_no_trailing_slash(api_client, sample_registration):
-    """Verify unauthenticated GET /api/registrations/<id> works without trailing slash."""
-    response = api_client.get(f"/api/registrations/{sample_registration.id}")
+def test_retrieve_registration_other_user_forbidden(
+    api_client, another_regular_user, get_auth_header, sample_registration
+):
+    """Verify non-owner regular User cannot retrieve another user's registration (403 Forbidden)."""
+    headers = get_auth_header(another_regular_user)
+    response = api_client.get(f"/api/registrations/{sample_registration.id}/", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_retrieve_registration_organizer_owner(api_client, organizer_user, get_auth_header, sample_registration):
+    """Verify Organizer can retrieve registration for an event they personally own (200 OK)."""
+    headers = get_auth_header(organizer_user)
+    response = api_client.get(f"/api/registrations/{sample_registration.id}/", **headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.data["id"] == str(sample_registration.id)
 
 
 @pytest.mark.django_db
-def test_retrieve_registration_not_found(api_client):
-    """Verify GET /api/registrations/<nonexistent_id>/ returns 404 Not Found."""
+def test_retrieve_registration_other_organizer_forbidden(api_client, sample_registration, get_auth_header):
+    """Verify an Organizer cannot retrieve a registration for an event owned by another Organizer (403 Forbidden)."""
+    from django.contrib.auth.models import Group
+
+    organizer_group, _ = Group.objects.get_or_create(name="organizer")
+    other_organizer = User.objects.create_user(
+        username="unrelated_org", email="unrelated_org@dicoevent.com", password="password123"
+    )
+    other_organizer.groups.add(organizer_group)
+
+    headers = get_auth_header(other_organizer)
+    response = api_client.get(f"/api/registrations/{sample_registration.id}/", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_organizer_cannot_modify_or_delete_participant_registration(
+    api_client, organizer_user, get_auth_header, sample_registration, sample_ticket
+):
+    """Verify Organizer attempting to PUT/PATCH or DELETE a participant's registration receives 403 Forbidden."""
+    headers = get_auth_header(organizer_user)
+
+    # Attempt PUT
+    put_res = api_client.put(
+        f"/api/registrations/{sample_registration.id}/",
+        {"ticket_id": str(sample_ticket.id)},
+        format="json",
+        **headers,
+    )
+    assert put_res.status_code == status.HTTP_403_FORBIDDEN
+
+    # Attempt PATCH
+    patch_res = api_client.patch(
+        f"/api/registrations/{sample_registration.id}/",
+        {"ticket_id": str(sample_ticket.id)},
+        format="json",
+        **headers,
+    )
+    assert patch_res.status_code == status.HTTP_403_FORBIDDEN
+
+    # Attempt DELETE
+    del_res = api_client.delete(f"/api/registrations/{sample_registration.id}/", **headers)
+    assert del_res.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_retrieve_registration_not_found(api_client, superuser, get_auth_header):
+    """Verify GET /api/registrations/<nonexistent_id>/ returns 404 Not Found for authorized actor."""
+    headers = get_auth_header(superuser)
     random_id = uuid.uuid4()
-    response = api_client.get(f"/api/registrations/{random_id}/")
+    response = api_client.get(f"/api/registrations/{random_id}/", **headers)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -262,7 +404,7 @@ def test_delete_registration_owner_and_subsequent_404(api_client, regular_user, 
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
     # Subsequent GET returns 404
-    get_res = api_client.get(f"/api/registrations/{reg_id}/")
+    get_res = api_client.get(f"/api/registrations/{reg_id}/", **headers)
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
 

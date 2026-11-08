@@ -1,9 +1,11 @@
+from django.db.models import Q
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from loguru import logger
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 
 from apps.core.mixins import PartialUpdateMixin
+from apps.core.permissions import is_admin_user, is_organizer_user
 
 from .models import Registration
 from .permissions import RegistrationViewSetPermission
@@ -16,11 +18,11 @@ __all__ = ["RegistrationViewSet"]
     list=extend_schema(
         description=(
             "List all Registrations wrapped in a registrations envelope with constant O(1) query "
-            "eager-loading (Admin and Superuser only)."
+            "eager-loading (scoped to own registrations for User, and owned events for Organizer)."
         )
     ),
     retrieve=extend_schema(
-        description="Retrieve Registration details by ID (unauthenticated public access per ADR-0001)."
+        description="Retrieve Registration details by ID (User owner, event Organizer, Admin, or Superuser)."
     ),
     create=extend_schema(
         description=(
@@ -37,14 +39,39 @@ __all__ = ["RegistrationViewSet"]
 class RegistrationViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
     """
     Registration ViewSet managing User Registration lifecycles and automated reminders:
-    - Eager-loading ticket, ticket__event, and user for constant O(1) query performance
+    - Eager-loading ticket, ticket__event, ticket__event__organizer, and user for constant O(1) query performance
     - Delegation of 2-hour pre-Event reminder scheduling to RegistrationSerializer.create
-    - Declarative User ownership and ADR-0001 unauthenticated detail retrieve permissions
+    - Scoped RBAC visibility for User, Organizer, and Admin roles
     """
 
-    queryset = Registration.objects.select_related("ticket", "ticket__event", "user").all().order_by("id")
+    queryset = (
+        Registration.objects.select_related("ticket", "ticket__event", "ticket__event__organizer", "user")
+        .all()
+        .order_by("id")
+    )
     serializer_class = RegistrationSerializer
     permission_classes = [RegistrationViewSetPermission]
+
+    def get_queryset(self):
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return Registration.objects.none()
+
+        base_qs = (
+            Registration.objects.select_related("ticket", "ticket__event", "ticket__event__organizer", "user")
+            .all()
+            .order_by("id")
+        )
+        if is_admin_user(user):
+            return base_qs
+
+        action = getattr(self, "action", None)
+        if action == "list":
+            if is_organizer_user(user):
+                return base_qs.filter(Q(user=user) | Q(ticket__event__organizer=user)).distinct()
+            return base_qs.filter(user=user)
+
+        return base_qs
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
