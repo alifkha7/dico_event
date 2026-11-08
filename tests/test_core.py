@@ -215,6 +215,58 @@ def test_role_ownership_permission_lifecycle(admin_user, organizer_user, regular
     assert perm.has_object_permission(request, view, dummy_obj) is False
 
 
+@pytest.mark.django_db
+def test_role_ownership_permission_read_only_owner(organizer_user, regular_user):
+    """
+    Verify RoleOwnershipPermission supports read_only_owner_roles and read_only_owner_field
+    for safe methods / retrieve, while denying mutation access to read-only owners.
+    """
+    perm = RoleOwnershipPermission()
+    perm.owner_field = "user_id"
+    perm.read_only_owner_roles = {"organizer"}
+    perm.read_only_owner_field = "ticket__event__organizer_id"
+
+    factory = APIRequestFactory()
+
+    # Nested mock object representing ticket -> event -> organizer_id
+    mock_event = MagicMock(organizer_id=str(organizer_user.id))
+    mock_ticket = MagicMock(event=mock_event)
+    mock_obj = MagicMock(user_id=str(regular_user.id), ticket=mock_ticket)
+
+    # 1. Direct owner (regular user) has retrieve and mutation access
+    request_user = factory.get("/api/registrations/1/")
+    request_user.user = regular_user
+    view_retrieve = MagicMock(action="retrieve")
+    assert perm.has_object_permission(request_user, view_retrieve, mock_obj) is True
+
+    request_user_put = factory.put("/api/registrations/1/")
+    request_user_put.user = regular_user
+    view_update = MagicMock(action="update")
+    assert perm.has_object_permission(request_user_put, view_update, mock_obj) is True
+
+    # 2. Read-only owner (organizer_user) has retrieve access
+    request_org = factory.get("/api/registrations/1/")
+    request_org.user = organizer_user
+    assert perm.has_object_permission(request_org, view_retrieve, mock_obj) is True
+
+    # 3. Read-only owner (organizer_user) CANNOT mutate (PUT/PATCH/DELETE)
+    request_org_put = factory.put("/api/registrations/1/")
+    request_org_put.user = organizer_user
+    assert perm.has_object_permission(request_org_put, view_update, mock_obj) is False
+
+    request_org_del = factory.delete("/api/registrations/1/")
+    request_org_del.user = organizer_user
+    view_destroy = MagicMock(action="destroy")
+    assert perm.has_object_permission(request_org_del, view_destroy, mock_obj) is False
+
+    # 4. Another organizer has NO access to retrieve or mutate
+    other_org = MagicMock(id=uuid.uuid4(), is_authenticated=True, is_superuser=False)
+    other_org._cached_role_names = {"organizer"}
+    request_other_org = factory.get("/api/registrations/1/")
+    request_other_org.user = other_org
+    assert perm.has_object_permission(request_other_org, view_retrieve, mock_obj) is False
+
+
 def test_partial_update_mixin():
     """Verify PartialUpdateMixin sets partial=True on PUT update kwargs."""
 

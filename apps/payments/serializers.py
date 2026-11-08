@@ -53,6 +53,23 @@ class PaymentSerializer(DualKeyModelSerializer):
         ]
         read_only_fields = ["id", "registration"]
 
+    def _enforce_single_completed_payment(self, registration, payment_status, instance=None, lock_row=False):
+        """Enforce single Completed payment rule per Registration, optionally locking registration row."""
+        if not registration or payment_status != "Completed":
+            return
+
+        if lock_row:
+            Registration.objects.select_for_update().get(pk=registration.pk)
+
+        instance_pk = instance.pk if instance else None
+        existing_completed = (
+            Payment.objects.filter(registration=registration, payment_status="Completed")
+            .exclude(pk=instance_pk)
+            .exists()
+        )
+        if existing_completed:
+            raise serializers.ValidationError({"payment_status": "This registration already has a completed payment."})
+
     def validate_amount_paid(self, value):
         if value is not None and value < 0:
             raise serializers.ValidationError("Amount paid must be non-negative.")
@@ -100,16 +117,12 @@ class PaymentSerializer(DualKeyModelSerializer):
         target_status = attrs.get("payment_status") or (self.instance.payment_status if self.instance else None)
         if target_status == "Completed" and registration:
             with transaction.atomic():
-                Registration.objects.select_for_update().get(pk=registration.pk)
-                existing_completed = (
-                    Payment.objects.filter(registration=registration, payment_status="Completed")
-                    .exclude(pk=self.instance.pk if self.instance else None)
-                    .exists()
+                self._enforce_single_completed_payment(
+                    registration=registration,
+                    payment_status=target_status,
+                    instance=self.instance,
+                    lock_row=True,
                 )
-                if existing_completed:
-                    raise serializers.ValidationError(
-                        {"payment_status": "This registration already has a completed payment."}
-                    )
 
         return attrs
 
@@ -117,28 +130,24 @@ class PaymentSerializer(DualKeyModelSerializer):
         registration = validated_data.get("registration")
         payment_status = validated_data.get("payment_status")
         with transaction.atomic():
-            if registration and payment_status == "Completed":
-                Registration.objects.select_for_update().get(pk=registration.pk)
-                if Payment.objects.filter(registration=registration, payment_status="Completed").exists():
-                    raise serializers.ValidationError(
-                        {"payment_status": "This registration already has a completed payment."}
-                    )
+            self._enforce_single_completed_payment(
+                registration=registration,
+                payment_status=payment_status,
+                instance=None,
+                lock_row=True,
+            )
             return super().create(validated_data)
 
     def update(self, instance, validated_data):
         registration = validated_data.get("registration") or instance.registration
         payment_status = validated_data.get("payment_status") or instance.payment_status
         with transaction.atomic():
-            if registration and payment_status == "Completed":
-                Registration.objects.select_for_update().get(pk=registration.pk)
-                if (
-                    Payment.objects.filter(registration=registration, payment_status="Completed")
-                    .exclude(pk=instance.pk)
-                    .exists()
-                ):
-                    raise serializers.ValidationError(
-                        {"payment_status": "This registration already has a completed payment."}
-                    )
+            self._enforce_single_completed_payment(
+                registration=registration,
+                payment_status=payment_status,
+                instance=instance,
+                lock_row=True,
+            )
             return super().update(instance, validated_data)
 
     def to_representation(self, instance):

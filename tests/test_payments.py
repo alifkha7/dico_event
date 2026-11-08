@@ -295,7 +295,7 @@ def test_list_payments_organizer_and_dual_role(
     pay_ids = [p["id"] for p in response.data["payments"]]
 
     # Must see:
-    # - sample_payment (attendee payment for organizer_user's event)
+    # - sample_payment (participant payment for organizer_user's event)
     # - organizer_personal_payment (organizer_user's personal payment)
     assert str(sample_payment.id) in pay_ids
     assert str(organizer_personal_payment.id) in pay_ids

@@ -57,7 +57,7 @@ def test_setup_data(organizer_user, regular_user):
         "registration": registration,
         "payment": payment,
         "organizer": organizer_user,
-        "attendee": regular_user,
+        "participant": regular_user,
     }
 
 
@@ -111,15 +111,15 @@ def test_delete_registration_with_payments_returns_409_conflict(
 @pytest.mark.django_db
 def test_delete_user_with_registrations_returns_409_conflict(api_client, superuser, get_auth_header, test_setup_data):
     """Verify attempting to DELETE a User with Registrations returns 409 Conflict and preserves records."""
-    attendee = test_setup_data["attendee"]
+    participant = test_setup_data["participant"]
     registration = test_setup_data["registration"]
     headers = get_auth_header(superuser)
 
-    response = api_client.delete(f"/api/users/{attendee.id}/", **headers)
+    response = api_client.delete(f"/api/users/{participant.id}/", **headers)
 
     assert response.status_code == status.HTTP_409_CONFLICT
     assert response.data == {"detail": PROTECTED_DETAIL}
-    assert User.objects.filter(id=attendee.id).exists()
+    assert User.objects.filter(id=participant.id).exists()
     assert Registration.objects.filter(id=registration.id).exists()
 
 

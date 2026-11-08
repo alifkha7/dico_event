@@ -3,7 +3,7 @@ import os
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *  # noqa: F403
-from .base import MIDDLEWARE
+from .base import MIDDLEWARE, configure_silk_middleware
 
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 if DEBUG:
@@ -50,7 +50,4 @@ if "*" in CORS_ALLOWED_ORIGINS or any("*" in o for o in CORS_ALLOWED_ORIGINS):
 
 # Silk profiling defaults to False in production
 ENABLE_SILK = os.environ.get("ENABLE_SILK", "False").lower() in ("true", "1", "yes")
-if not ENABLE_SILK:
-    MIDDLEWARE = [m for m in MIDDLEWARE if m != "silk.middleware.SilkyMiddleware"]
-elif "silk.middleware.SilkyMiddleware" not in MIDDLEWARE:
-    MIDDLEWARE = ["silk.middleware.SilkyMiddleware"] + [m for m in MIDDLEWARE if m != "silk.middleware.SilkyMiddleware"]
+MIDDLEWARE = configure_silk_middleware(ENABLE_SILK, MIDDLEWARE)

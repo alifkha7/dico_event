@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 # Ensure fast SQLite in-memory and local memory cache for testing
 os.environ["USE_SQLITE_TEST"] = "True"
+os.environ.setdefault("DJANGO_ENV", "test")
 
 
 @pytest.fixture(autouse=True)

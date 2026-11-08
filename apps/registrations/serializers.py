@@ -51,59 +51,66 @@ class RegistrationSerializer(DualKeyModelSerializer):
         fields = ["id", "ticket", "ticket_id", "user", "user_id"]
         read_only_fields = ["id", "ticket", "user"]
 
+    def _validate_and_lock_registration_intake(self, ticket, user, instance=None, lock_rows=False):
+        """
+        Validate registration intake rules and optionally lock ticket/event rows with select_for_update():
+        - Sales window check: enforced on create or when ticket is changing on update
+        - Uniqueness check: single registration per (ticket, user)
+        - Ticket quota check: enforced on create or when ticket is changing on update
+        - Event quota check: enforced on create or when ticket changes across events on update
+        """
+        if lock_rows:
+            locked_ticket = Ticket.objects.select_for_update().select_related("event").get(pk=ticket.pk)
+            locked_event = Event.objects.select_for_update().filter(tickets=locked_ticket).get()
+        else:
+            locked_ticket = ticket
+            locked_event = getattr(ticket, "event", None)
+
+        instance_pk = instance.pk if instance else None
+        is_ticket_changing = instance is None or str(ticket.pk) != str(instance.ticket_id)
+
+        if is_ticket_changing:
+            now = timezone.now()
+            if now < locked_ticket.sales_start or now > locked_ticket.sales_end:
+                raise serializers.ValidationError({"ticket": "Ticket sales window is not currently active."})
+
+        if Registration.objects.filter(ticket=locked_ticket, user=user).exclude(pk=instance_pk).exists():
+            raise serializers.ValidationError({"detail": "User is already registered for this ticket."})
+
+        if is_ticket_changing:
+            ticket_reg_count = Registration.objects.filter(ticket=locked_ticket).exclude(pk=instance_pk).count()
+            if ticket_reg_count >= locked_ticket.quota:
+                raise serializers.ValidationError({"ticket": "Ticket quota has been reached."})
+
+            if locked_event is not None and hasattr(locked_event, "quota"):
+                if instance is None or locked_ticket.event_id != instance.ticket.event_id:
+                    event_reg_count = (
+                        Registration.objects.filter(ticket__event=locked_event).exclude(pk=instance_pk).count()
+                    )
+                    if event_reg_count >= locked_event.quota:
+                        raise serializers.ValidationError({"ticket": "Event quota has been reached."})
+
+        return locked_ticket, locked_event
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         ticket = attrs.get("ticket") or (self.instance.ticket if self.instance else None)
         user = attrs.get("user") or (self.instance.user if self.instance else None)
-        instance_pk = self.instance.pk if self.instance else None
 
         if ticket is not None and user is not None:
-            now = timezone.now()
-            if now < ticket.sales_start or now > ticket.sales_end:
-                raise serializers.ValidationError({"ticket": "Ticket sales window is not currently active."})
-
-            if Registration.objects.filter(ticket=ticket, user=user).exclude(pk=instance_pk).exists():
-                raise serializers.ValidationError({"detail": "User is already registered for this ticket."})
-
-            ticket_reg_count = Registration.objects.filter(ticket=ticket).exclude(pk=instance_pk).count()
-            if ticket_reg_count >= ticket.quota:
-                raise serializers.ValidationError({"ticket": "Ticket quota has been reached."})
-
-            event = getattr(ticket, "event", None)
-            if event is not None and hasattr(event, "quota"):
-                event_reg_count = Registration.objects.filter(ticket__event=event).exclude(pk=instance_pk).count()
-                if event_reg_count >= event.quota:
-                    raise serializers.ValidationError({"ticket": "Event quota has been reached."})
+            self._validate_and_lock_registration_intake(
+                ticket=ticket, user=user, instance=self.instance, lock_rows=False
+            )
 
         return attrs
 
     def create(self, validated_data):
         ticket = validated_data["ticket"]
         user = validated_data["user"]
-        instance_pk = self.instance.pk if self.instance else None
 
         try:
             with transaction.atomic():
-                locked_ticket = Ticket.objects.select_for_update().select_related("event").get(pk=ticket.pk)
-                locked_event = Event.objects.select_for_update().filter(tickets=locked_ticket).get()
-
-                now = timezone.now()
-                if now < locked_ticket.sales_start or now > locked_ticket.sales_end:
-                    raise serializers.ValidationError({"ticket": "Ticket sales window is not currently active."})
-
-                if Registration.objects.filter(ticket=locked_ticket, user=user).exclude(pk=instance_pk).exists():
-                    raise serializers.ValidationError({"detail": "User is already registered for this ticket."})
-
-                ticket_reg_count = Registration.objects.filter(ticket=locked_ticket).exclude(pk=instance_pk).count()
-                if ticket_reg_count >= locked_ticket.quota:
-                    raise serializers.ValidationError({"ticket": "Ticket quota has been reached."})
-
-                event_reg_count = (
-                    Registration.objects.filter(ticket__event=locked_event).exclude(pk=instance_pk).count()
-                )
-                if event_reg_count >= locked_event.quota:
-                    raise serializers.ValidationError({"ticket": "Event quota has been reached."})
-
+                self._validate_and_lock_registration_intake(ticket=ticket, user=user, instance=None, lock_rows=True)
                 registration = super().create(validated_data)
         except IntegrityError:
             raise serializers.ValidationError({"detail": "User is already registered for this ticket."})
@@ -117,32 +124,10 @@ class RegistrationSerializer(DualKeyModelSerializer):
     def update(self, instance, validated_data):
         ticket = validated_data.get("ticket", instance.ticket)
         user = validated_data.get("user", instance.user)
-        instance_pk = instance.pk
 
         try:
             with transaction.atomic():
-                locked_ticket = Ticket.objects.select_for_update().select_related("event").get(pk=ticket.pk)
-                locked_event = Event.objects.select_for_update().filter(tickets=locked_ticket).get()
-
-                now = timezone.now()
-                if now < locked_ticket.sales_start or now > locked_ticket.sales_end:
-                    raise serializers.ValidationError({"ticket": "Ticket sales window is not currently active."})
-
-                if Registration.objects.filter(ticket=locked_ticket, user=user).exclude(pk=instance_pk).exists():
-                    raise serializers.ValidationError({"detail": "User is already registered for this ticket."})
-
-                if ticket.pk != instance.ticket_id:
-                    ticket_reg_count = Registration.objects.filter(ticket=locked_ticket).exclude(pk=instance_pk).count()
-                    if ticket_reg_count >= locked_ticket.quota:
-                        raise serializers.ValidationError({"ticket": "Ticket quota has been reached."})
-
-                    if locked_ticket.event_id != instance.ticket.event_id:
-                        event_reg_count = (
-                            Registration.objects.filter(ticket__event=locked_event).exclude(pk=instance_pk).count()
-                        )
-                        if event_reg_count >= locked_event.quota:
-                            raise serializers.ValidationError({"ticket": "Event quota has been reached."})
-
+                self._validate_and_lock_registration_intake(ticket=ticket, user=user, instance=instance, lock_rows=True)
                 return super().update(instance, validated_data)
         except IntegrityError:
             raise serializers.ValidationError({"detail": "User is already registered for this ticket."})

@@ -21,6 +21,16 @@ ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()] 
 # Silk profiling flag (default False in base; overridden in dev)
 ENABLE_SILK = os.environ.get("ENABLE_SILK", "False").lower() in ("true", "1", "yes")
 
+
+def configure_silk_middleware(enable_silk: bool, middleware: list[str]) -> list[str]:
+    """Ensure silk.middleware.SilkyMiddleware is prepended when enabled and removed when disabled."""
+    silk_mw = "silk.middleware.SilkyMiddleware"
+    filtered = [m for m in middleware if m != silk_mw]
+    if enable_silk:
+        return [silk_mw] + filtered
+    return filtered
+
+
 # Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",
