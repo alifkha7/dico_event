@@ -4,7 +4,7 @@
 
 **Blocked by:** 03: Scoped RBAC Visibility for `User`, `Registration`, and `Payment` Endpoints
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Database foreign keys on `Ticket.event`, `Registration.ticket`, `Registration.user`, and `Payment.registration` enforce `on_delete=PROTECT` via applied schema migrations.
 - [ ] Deleting an `Event` with no `Ticket`s, a `Ticket` with no `Registration`s, a `Registration` with no `Payment`s, or a `User` with no `Registration`s or owned `Event`s succeeds with `204 No Content`.
