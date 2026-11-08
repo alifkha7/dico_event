@@ -103,26 +103,56 @@ def test_list_users_unauthenticated(api_client):
 
 
 @pytest.mark.django_db
-def test_retrieve_user_allow_any(api_client, regular_user):
-    """Verify GET /api/users/<id>/ allows unauthenticated retrieve per ADR-0001."""
+def test_retrieve_user_unauthenticated_unauthorized(api_client, regular_user):
+    """Verify GET /api/users/<id>/ rejects unauthenticated requests with 401 Unauthorized."""
     # With trailing slash
     res1 = api_client.get(f"/api/users/{regular_user.id}/")
-    assert res1.status_code == status.HTTP_200_OK
-    assert res1.data["id"] == str(regular_user.id)
-    assert res1.data["username"] == regular_user.username
-    assert res1.data["email"] == regular_user.email
+    assert res1.status_code == status.HTTP_401_UNAUTHORIZED
 
     # Without trailing slash
     res2 = api_client.get(f"/api/users/{regular_user.id}")
-    assert res2.status_code == status.HTTP_200_OK
-    assert res2.data["id"] == str(regular_user.id)
+    assert res2.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.django_db
-def test_retrieve_user_not_found(api_client):
-    """Verify GET /api/users/<non_existent_uuid>/ returns 404 Not Found."""
+def test_retrieve_user_own_profile(api_client, regular_user, get_auth_header):
+    """Verify authenticated User can retrieve their own profile with 200 OK."""
+    headers = get_auth_header(regular_user)
+    response = api_client.get(f"/api/users/{regular_user.id}/", **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["id"] == str(regular_user.id)
+    assert response.data["username"] == regular_user.username
+    assert response.data["email"] == regular_user.email
+
+
+@pytest.mark.django_db
+def test_retrieve_user_other_user_forbidden(api_client, regular_user, admin_user, get_auth_header):
+    """Verify authenticated User is rejected with 403 Forbidden when retrieving another user's profile."""
+    headers = get_auth_header(regular_user)
+    response = api_client.get(f"/api/users/{admin_user.id}/", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_retrieve_user_admin_and_superuser(api_client, admin_user, superuser, regular_user, get_auth_header):
+    """Verify Admin and Superuser can retrieve any user profile with 200 OK."""
+    admin_headers = get_auth_header(admin_user)
+    res_admin = api_client.get(f"/api/users/{regular_user.id}/", **admin_headers)
+    assert res_admin.status_code == status.HTTP_200_OK
+    assert res_admin.data["id"] == str(regular_user.id)
+
+    super_headers = get_auth_header(superuser)
+    res_super = api_client.get(f"/api/users/{regular_user.id}/", **super_headers)
+    assert res_super.status_code == status.HTTP_200_OK
+    assert res_super.data["id"] == str(regular_user.id)
+
+
+@pytest.mark.django_db
+def test_retrieve_user_not_found(api_client, superuser, get_auth_header):
+    """Verify GET /api/users/<non_existent_uuid>/ returns 404 Not Found for authorized actor."""
+    headers = get_auth_header(superuser)
     fake_uuid = uuid.uuid4()
-    response = api_client.get(f"/api/users/{fake_uuid}/")
+    response = api_client.get(f"/api/users/{fake_uuid}/", **headers)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -177,7 +207,7 @@ def test_delete_user_and_subsequent_404(api_client, admin_user, regular_user, ge
     del_res = api_client.delete(f"/api/users/{user_id}/", **headers)
     assert del_res.status_code == status.HTTP_204_NO_CONTENT
 
-    get_res = api_client.get(f"/api/users/{user_id}/")
+    get_res = api_client.get(f"/api/users/{user_id}/", **headers)
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -189,7 +219,7 @@ def test_delete_user_by_superuser(api_client, superuser, regular_user, get_auth_
     del_res = api_client.delete(f"/api/users/{user_id}/", **headers)
     assert del_res.status_code == status.HTTP_204_NO_CONTENT
 
-    get_res = api_client.get(f"/api/users/{user_id}/")
+    get_res = api_client.get(f"/api/users/{user_id}/", **headers)
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
 

@@ -83,7 +83,7 @@ class RoleOwnershipPermission(permissions.BasePermission):
     - Group-scoped permissions and declarative resource ownership verification
     """
 
-    public_actions = ("retrieve",)
+    public_actions = ()
     admin_only_actions = ()
     allowed_create_roles = None
     owner_field = None
@@ -93,9 +93,6 @@ class RoleOwnershipPermission(permissions.BasePermission):
     def is_public_action(self, request, view):
         action = getattr(view, "action", None)
         if action in self.public_actions:
-            return True
-        # ADR-0001 unauthenticated detail retrieve
-        if request.method == "GET" and action == "retrieve":
             return True
         return False
 

@@ -273,6 +273,122 @@ def test_payments_list_num_queries_constant(
     assert res_10.status_code == status.HTTP_200_OK
 
 
+@pytest.mark.django_db
+def test_scoped_registrations_list_num_queries_constant_for_organizer(
+    api_client, organizer_user, get_auth_header, django_assert_num_queries
+):
+    """
+    Verify GET /api/registrations/ by an Organizer executes a constant number of SQL queries
+    for 2 vs 10 registrations across owned events (O(1) query count under scoped queryset).
+    """
+    headers = get_auth_header(organizer_user)
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Org Scoped Reg Event",
+        description="Event for scoped registrations",
+        location="Online",
+        start_time=now + timedelta(days=5),
+        end_time=now + timedelta(days=6),
+        status="published",
+        quota=200,
+        category="Tech",
+        organizer=organizer_user,
+    )
+    ticket = Ticket.objects.create(
+        event=event,
+        name="General Admission",
+        price=10000,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=4),
+        quota=100,
+    )
+
+    # 1. Seed 2 registrations
+    users = [
+        User.objects.create_user(
+            username=f"scoped_reg_u_{i}", email=f"scoped_reg_{i}@dicoevent.com", password="password123"
+        )
+        for i in range(1, 11)
+    ]
+    Registration.objects.create(ticket=ticket, user=users[0])
+    Registration.objects.create(ticket=ticket, user=users[1])
+
+    with CaptureQueriesContext(connection) as ctx_2:
+        res_2 = api_client.get("/api/registrations/", **headers)
+    assert res_2.status_code == status.HTTP_200_OK
+    queries_2 = len(ctx_2.captured_queries)
+
+    # 2. Seed 8 more registrations (10 total)
+    for i in range(2, 10):
+        Registration.objects.create(ticket=ticket, user=users[i])
+
+    with django_assert_num_queries(queries_2):
+        res_10 = api_client.get("/api/registrations/", **headers)
+    assert res_10.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+def test_scoped_payments_list_num_queries_constant_for_organizer(
+    api_client, organizer_user, get_auth_header, django_assert_num_queries
+):
+    """
+    Verify GET /api/payments/ by an Organizer executes a constant number of SQL queries
+    for 2 vs 10 payments across owned events (O(1) query count under scoped queryset).
+    """
+    headers = get_auth_header(organizer_user)
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Org Scoped Pay Event",
+        description="Event for scoped payments",
+        location="Online",
+        start_time=now + timedelta(days=5),
+        end_time=now + timedelta(days=6),
+        status="published",
+        quota=200,
+        category="Tech",
+        organizer=organizer_user,
+    )
+    ticket = Ticket.objects.create(
+        event=event,
+        name="General Admission",
+        price=15000,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=4),
+        quota=100,
+    )
+
+    users = [
+        User.objects.create_user(
+            username=f"scoped_pay_u_{i}", email=f"scoped_pay_{i}@dicoevent.com", password="password123"
+        )
+        for i in range(1, 11)
+    ]
+    regs = [Registration.objects.create(ticket=ticket, user=u) for u in users]
+
+    # 1. Seed 2 payments
+    Payment.objects.create(
+        registration=regs[0], payment_method="Bank Transfer", payment_status="Completed", amount_paid=15000
+    )
+    Payment.objects.create(
+        registration=regs[1], payment_method="Credit Card", payment_status="Completed", amount_paid=15000
+    )
+
+    with CaptureQueriesContext(connection) as ctx_2:
+        res_2 = api_client.get("/api/payments/", **headers)
+    assert res_2.status_code == status.HTTP_200_OK
+    queries_2 = len(ctx_2.captured_queries)
+
+    # 2. Seed 8 more payments (10 total)
+    for i in range(2, 10):
+        Payment.objects.create(
+            registration=regs[i], payment_method="GoPay", payment_status="Completed", amount_paid=15000
+        )
+
+    with django_assert_num_queries(queries_2):
+        res_10 = api_client.get("/api/payments/", **headers)
+    assert res_10.status_code == status.HTTP_200_OK
+
+
 # ==========================================
 # 3. Object-level Permission Check & Mutation Query Tests
 # ==========================================
