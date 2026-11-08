@@ -468,3 +468,162 @@ def test_attach_event_poster_oversized_and_corrupt_rejected(sample_event, organi
             attach_event_poster(sample_event, corrupt_image, organizer_user)
         assert "Uploaded file is not a valid image." in str(exc2.value)
         mock_upload.assert_not_called()
+
+
+# ==========================================
+# 6. Presigned Event Poster URL Tests (Ticket 02)
+# ==========================================
+
+
+def test_get_public_minio_client_configuration_and_fallback(monkeypatch):
+    """Verify get_public_minio_client configures public endpoint, falls back to MINIO_ENDPOINT_URL, and sets region."""
+    from apps.events.storage import get_public_minio_client
+
+    # Case 1: MINIO_PUBLIC_ENDPOINT_URL is explicitly set
+    monkeypatch.setattr(settings, "MINIO_ENDPOINT_URL", "http://minio-internal:9000")
+    monkeypatch.setattr(settings, "MINIO_PUBLIC_ENDPOINT_URL", "http://localhost:9000")
+    monkeypatch.setattr(settings, "MINIO_ACCESS_KEY", "pub_access")
+    monkeypatch.setattr(settings, "MINIO_SECRET_KEY", "pub_secret")
+    monkeypatch.setattr(settings, "MINIO_USE_SSL", False)
+
+    client = get_public_minio_client()
+    assert client._base_url._url.netloc == "localhost:9000"
+    assert client._base_url.is_https is False
+    assert client._get_region("dicoevent-posters") == "us-east-1"
+    creds = client._provider.retrieve()
+    assert creds.access_key == "pub_access"
+    assert creds.secret_key == "pub_secret"
+
+    # Case 2: MINIO_PUBLIC_ENDPOINT_URL is unset/empty -> fall back to MINIO_ENDPOINT_URL
+    monkeypatch.setattr(settings, "MINIO_PUBLIC_ENDPOINT_URL", "")
+    monkeypatch.setattr(settings, "MINIO_ENDPOINT_URL", "https://s3.fallback.local:9443")
+    client_fallback = get_public_minio_client()
+    assert client_fallback._base_url._url.netloc == "s3.fallback.local:9443"
+    assert client_fallback._base_url.is_https is True
+    assert client_fallback._get_region("dicoevent-posters") == "us-east-1"
+
+
+def test_generate_presigned_poster_url_valid_and_expiry(monkeypatch):
+    """Verify generate_presigned_poster_url produces a signed GET URL with configurable expiry and query params."""
+    monkeypatch.setattr(settings, "MINIO_PUBLIC_ENDPOINT_URL", "http://localhost:9000")
+    monkeypatch.setattr(settings, "MINIO_BUCKET_NAME", "dicoevent-posters")
+    monkeypatch.setattr(settings, "MINIO_PRESIGNED_EXPIRY_SECONDS", 1800)
+
+    from apps.events.storage import generate_presigned_poster_url
+
+    url = generate_presigned_poster_url("sample_key_123.png")
+    assert url is not None
+    assert url.startswith("http://localhost:9000/dicoevent-posters/sample_key_123.png?")
+    assert "X-Amz-Algorithm=AWS4-HMAC-SHA256" in url
+    assert "X-Amz-Credential=" in url
+    assert "X-Amz-Signature=" in url
+    assert "X-Amz-Expires=1800" in url
+
+    # Empty key returns None
+    assert generate_presigned_poster_url("") is None
+    assert generate_presigned_poster_url(None) is None
+
+
+def test_generate_presigned_poster_url_exception_logs_warning_and_returns_none(monkeypatch):
+    """Verify presigned URL generation failure logs a warning and returns None without raising."""
+    from apps.events.storage import generate_presigned_poster_url
+
+    mock_client = MagicMock()
+    mock_client.presigned_get_object.side_effect = RuntimeError("MinIO connection reset")
+
+    with patch("apps.events.storage.get_public_minio_client", return_value=mock_client):
+        with patch("apps.events.storage.logger.warning") as mock_warning:
+            result = generate_presigned_poster_url("broken_key.png")
+            assert result is None
+            mock_warning.assert_called_once()
+            assert "Failed to generate presigned URL" in mock_warning.call_args[0][0]
+
+
+@pytest.mark.django_db
+def test_upload_poster_returns_presigned_image_url(
+    api_client, organizer_user, get_auth_header, sample_event, monkeypatch
+):
+    """Verify POST /api/events/upload/ returns id, image, image_url, and event with public endpoint signature."""
+    monkeypatch.setattr(settings, "MINIO_PUBLIC_ENDPOINT_URL", "http://localhost:9000")
+    monkeypatch.setattr(settings, "MINIO_ENDPOINT_URL", "http://minio:9000")
+    monkeypatch.setattr(settings, "MINIO_PRESIGNED_EXPIRY_SECONDS", 3600)
+
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="stored_poster_key_signed.png"):
+        image = create_valid_test_image()
+        res = api_client.post(
+            "/api/events/upload/",
+            {"image": image, "event": str(sample_event.id)},
+            format="multipart",
+            **get_auth_header(organizer_user),
+        )
+        assert res.status_code == status.HTTP_201_CREATED
+        assert "id" in res.data and res.data["id"]
+        assert "image" in res.data and res.data["image"] == "stored_poster_key_signed.png"
+        assert "event" in res.data and res.data["event"] == str(sample_event.id)
+        assert "image_url" in res.data
+        image_url = res.data["image_url"]
+        assert image_url is not None
+        assert image_url.startswith("http://localhost:9000/dicoevent-posters/stored_poster_key_signed.png?")
+        assert "X-Amz-Algorithm=AWS4-HMAC-SHA256" in image_url
+        assert "X-Amz-Credential=" in image_url
+        assert "X-Amz-Signature=" in image_url
+        assert "X-Amz-Expires=3600" in image_url
+
+
+@pytest.mark.django_db
+def test_get_event_posters_list_includes_presigned_image_url(api_client, sample_event, monkeypatch):
+    """Verify GET /api/events/<id>/posters/ and GET /api/event-posters/ return image_url on each poster."""
+    monkeypatch.setattr(settings, "MINIO_PUBLIC_ENDPOINT_URL", "http://cdn.dicoevent.local:9000")
+    monkeypatch.setattr(settings, "MINIO_PRESIGNED_EXPIRY_SECONDS", 7200)
+
+    p1 = EventPoster.objects.create(event=sample_event, image="poster_one.png")
+    p2 = EventPoster.objects.create(event=sample_event, image="poster_two.png")
+
+    # 1. GET /api/events/<id>/posters/
+    res1 = api_client.get(f"/api/events/{sample_event.id}/posters/")
+    assert res1.status_code == status.HTTP_200_OK
+    assert len(res1.data) == 2
+    for item in res1.data:
+        assert "image_url" in item
+        assert item["image_url"].startswith(f"http://cdn.dicoevent.local:9000/dicoevent-posters/{item['image']}?")
+        assert "X-Amz-Expires=7200" in item["image_url"]
+
+    # 2. GET /api/event-posters/
+    res2 = api_client.get("/api/event-posters/")
+    assert res2.status_code == status.HTTP_200_OK
+    assert len(res2.data) >= 2
+    items_by_id = {item["id"]: item for item in res2.data}
+    assert str(p1.id) in items_by_id
+    assert items_by_id[str(p1.id)]["image_url"].startswith(
+        "http://cdn.dicoevent.local:9000/dicoevent-posters/poster_one.png?"
+    )
+    assert str(p2.id) in items_by_id
+    assert items_by_id[str(p2.id)]["image_url"].startswith(
+        "http://cdn.dicoevent.local:9000/dicoevent-posters/poster_two.png?"
+    )
+
+
+@pytest.mark.django_db
+def test_presigned_url_generation_failure_in_api_returns_null_gracefully(
+    api_client, organizer_user, get_auth_header, sample_event
+):
+    """Verify that if presigned URL generation fails, upload and list return 201/200 with image_url as null."""
+    with patch("apps.events.storage.upload_poster_to_minio", return_value="failed_signing_key.png"):
+        with patch("apps.events.serializers.generate_presigned_poster_url", return_value=None):
+            # Upload returns 201 with image_url = None (null)
+            image = create_valid_test_image()
+            res_upload = api_client.post(
+                "/api/events/upload/",
+                {"image": image, "event": str(sample_event.id)},
+                format="multipart",
+                **get_auth_header(organizer_user),
+            )
+            assert res_upload.status_code == status.HTTP_201_CREATED
+            assert res_upload.data["image"] == "failed_signing_key.png"
+            assert res_upload.data["image_url"] is None
+
+            # Listing returns 200 with image_url = None (null)
+            res_list = api_client.get(f"/api/events/{sample_event.id}/posters/")
+            assert res_list.status_code == status.HTTP_200_OK
+            assert len(res_list.data) == 1
+            assert res_list.data[0]["image_url"] is None
