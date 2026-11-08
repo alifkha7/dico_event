@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The pre-transition commit is tagged as `v2.0-dicoding-submission` in Git history.
 - [ ] Application configuration is separated into `base`, `dev`, `prod`, and `test` modules, with root package imports routing via `DJANGO_ENV` (defaulting to `dev`) and `BASE_DIR` resolving to the repository root across all environments.
