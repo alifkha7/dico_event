@@ -14,7 +14,7 @@ class Event(models.Model):
     status = models.CharField(max_length=50)
     quota = models.IntegerField()
     category = models.CharField(max_length=100)
-    organizer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="events")
+    organizer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="events")
 
     class Meta:
         db_table = "events"

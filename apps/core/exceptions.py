@@ -1,3 +1,4 @@
+from django.db.models import ProtectedError
 from loguru import logger
 from rest_framework import status
 from rest_framework.response import Response
@@ -5,6 +6,14 @@ from rest_framework.views import exception_handler
 
 
 def custom_exception_handler(exc, context):
+    if isinstance(exc, ProtectedError):
+        view = context.get("view") if context else None
+        logger.warning(f"Deletion blocked by ProtectedError in {view}: {exc}")
+        return Response(
+            {"detail": "Cannot delete this resource because it is referenced by existing transactional records."},
+            status=status.HTTP_409_CONFLICT,
+        )
+
     response = exception_handler(exc, context)
 
     view_name = context.get("view").__class__.__name__ if context and context.get("view") else "UnknownView"

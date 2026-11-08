@@ -4,9 +4,9 @@
 
 **Blocked by:** 03: Scoped RBAC Visibility for `User`, `Registration`, and `Payment` Endpoints
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] Database foreign keys on `Ticket.event`, `Registration.ticket`, `Registration.user`, and `Payment.registration` enforce `on_delete=PROTECT` via applied schema migrations.
-- [ ] Deleting an `Event` with no `Ticket`s, a `Ticket` with no `Registration`s, a `Registration` with no `Payment`s, or a `User` with no `Registration`s or owned `Event`s succeeds with `204 No Content`.
-- [ ] Attempting to `DELETE` an `Event` that has `Ticket`s, a `Ticket` that has `Registration`s, a `User` that has `Registration`s, or a `Registration` that has `Payment`s is intercepted by the centralized exception handler, logged via Loguru, and rejected with `409 Conflict` and a JSON `{"detail": "..."}` response while leaving all database rows intact.
-- [ ] Automated HTTP API tests replace the legacy ADR-0001 cascading-delete assertions with verification of `409 Conflict` audit protection and `204 No Content` clean deletion when unreferenced.
+- [x] Database foreign keys on `Ticket.event`, `Registration.ticket`, `Registration.user`, and `Payment.registration` enforce `on_delete=PROTECT` via applied schema migrations.
+- [x] Deleting an `Event` with no `Ticket`s, a `Ticket` with no `Registration`s, a `Registration` with no `Payment`s, or a `User` with no `Registration`s or owned `Event`s succeeds with `204 No Content`.
+- [x] Attempting to `DELETE` an `Event` that has `Ticket`s, a `Ticket` that has `Registration`s, a `User` that has `Registration`s, or a `Registration` that has `Payment`s is intercepted by the centralized exception handler, logged via Loguru, and rejected with `409 Conflict` and a JSON `{"detail": "..."}` response while leaving all database rows intact.
+- [x] Automated HTTP API tests replace the legacy ADR-0001 cascading-delete assertions with verification of `409 Conflict` audit protection and `204 No Content` clean deletion when unreferenced.
