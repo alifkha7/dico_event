@@ -117,7 +117,7 @@ def test_create_payment_authenticated_user(api_client, regular_user, get_auth_he
     assert response.data["registration"] == sample_payment_data["registration_id"]
     assert response.data["registration_id"] == sample_payment_data["registration_id"]
     assert response.data["payment_method"] == sample_payment_data["payment_method"]
-    assert response.data["payment_status"] == sample_payment_data["payment_status"]
+    assert response.data["payment_status"] == "Pending"
     assert response.data["amount_paid"] == 100000
     assert isinstance(response.data["amount_paid"], int)
 
@@ -434,11 +434,196 @@ def test_update_payment_normalizes_completed_status(api_client, regular_user, ge
 def test_update_payment_admin(api_client, admin_user, get_auth_header, sample_payment):
     """Verify Admin can update any payment."""
     headers = get_auth_header(admin_user)
-    payload = {"amount_paid": 120000}
+    payload = {"payment_method": "Direct Bank Deposit"}
     response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
     assert response.status_code == status.HTTP_200_OK
     sample_payment.refresh_from_db()
-    assert sample_payment.amount_paid == 120000
+    assert sample_payment.payment_method == "Direct Bank Deposit"
+
+
+# ==========================================
+# 7. Canonical Status Validation & Normalization
+# ==========================================
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "input_status,expected_status",
+    [
+        ("pending", "Pending"),
+        ("Pending", "Pending"),
+        ("PENDING", "Pending"),
+        ("  pending  ", "Pending"),
+        ("failed", "Failed"),
+        ("Failed", "Failed"),
+        ("FAILED", "Failed"),
+        ("completed", "Completed"),
+        ("Completed", "Completed"),
+        ("COMPLETED", "Completed"),
+    ],
+)
+def test_create_payment_canonical_status_normalization(
+    api_client, regular_user, get_auth_header, sample_payment_data, input_status, expected_status
+):
+    """Verify payment status is normalized case-insensitively to canonical status on create."""
+    headers = get_auth_header(regular_user)
+    payload = {**sample_payment_data, "payment_status": input_status}
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["payment_status"] == expected_status
+    payment_id = response.data["id"]
+    db_payment = Payment.objects.get(id=payment_id)
+    assert db_payment.payment_status == expected_status
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invalid_status", ["Processing", "Cancelled", "Unknown", "expired", "123", ""])
+def test_create_payment_invalid_status_rejected(
+    api_client, regular_user, get_auth_header, sample_payment_data, invalid_status
+):
+    """Verify invalid payment status is rejected with 400 Bad Request."""
+    headers = get_auth_header(regular_user)
+    payload = {**sample_payment_data, "payment_status": invalid_status}
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "payment_status" in response.data
+    assert "Invalid payment status. Must be one of: Pending, Completed, Failed, Refunded." in str(
+        response.data["payment_status"]
+    )
+
+
+@pytest.mark.django_db
+def test_update_payment_invalid_status_rejected(api_client, regular_user, get_auth_header, sample_payment):
+    """Verify updating payment with invalid status is rejected with 400 Bad Request."""
+    headers = get_auth_header(regular_user)
+    payload = {"payment_status": "UnsupportedStatus"}
+    response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "payment_status" in response.data
+
+
+@pytest.mark.django_db
+def test_update_payment_normalizes_failed_status(api_client, regular_user, get_auth_header, sample_payment):
+    """Verify updating payment with lowercase 'failed' normalizes to 'Failed'."""
+    headers = get_auth_header(regular_user)
+    payload = {"payment_status": "failed"}
+    response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["payment_status"] == "Failed"
+    sample_payment.refresh_from_db()
+    assert sample_payment.payment_status == "Failed"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("mismatched_amount", [50000, 99999, 100001, 150000])
+def test_create_payment_amount_paid_mismatch_rejected(
+    api_client, regular_user, get_auth_header, sample_payment_data, mismatched_amount
+):
+    """Verify payment creation rejects amount_paid mismatch with ticket.price (400 Bad Request)."""
+    headers = get_auth_header(regular_user)
+    payload = {**sample_payment_data, "amount_paid": mismatched_amount}
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "amount_paid" in response.data
+    assert "100000" in str(response.data["amount_paid"])
+
+
+@pytest.mark.django_db
+def test_create_payment_free_ticket_zero_amount_paid_succeeds(
+    api_client, regular_user, organizer_user, get_auth_header
+):
+    """Verify payment creation for free ticket (price == 0) succeeds with amount_paid == 0 (201 Created)."""
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Free Community Meetup",
+        description="Free event",
+        location="Bandung",
+        start_time=now + timedelta(days=2),
+        end_time=now + timedelta(days=3),
+        status="published",
+        quota=50,
+        category="Community",
+        organizer=organizer_user,
+    )
+    free_ticket = Ticket.objects.create(
+        event=event,
+        name="Community RSVP",
+        price=0,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=1),
+        quota=50,
+    )
+    reg = Registration.objects.create(ticket=free_ticket, user=regular_user)
+
+    headers = get_auth_header(regular_user)
+    payload = {
+        "registration_id": str(reg.id),
+        "payment_method": "Free RSVP",
+        "payment_status": "Pending",
+        "amount_paid": 0,
+    }
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["amount_paid"] == 0
+
+
+@pytest.mark.django_db
+def test_create_payment_free_ticket_positive_amount_paid_rejected(
+    api_client, regular_user, organizer_user, get_auth_header
+):
+    """Verify payment creation for free ticket (price == 0) rejects positive amount_paid (400 Bad Request)."""
+    now = datetime.now(timezone.utc)
+    event = Event.objects.create(
+        name="Free Meetup 2",
+        description="Free event",
+        location="Bandung",
+        start_time=now + timedelta(days=2),
+        end_time=now + timedelta(days=3),
+        status="published",
+        quota=50,
+        category="Community",
+        organizer=organizer_user,
+    )
+    free_ticket = Ticket.objects.create(
+        event=event,
+        name="Community RSVP",
+        price=0,
+        sales_start=now - timedelta(days=1),
+        sales_end=now + timedelta(days=1),
+        quota=50,
+    )
+    reg = Registration.objects.create(ticket=free_ticket, user=regular_user)
+
+    headers = get_auth_header(regular_user)
+    payload = {
+        "registration_id": str(reg.id),
+        "payment_method": "Free RSVP",
+        "payment_status": "Pending",
+        "amount_paid": 10000,
+    }
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "amount_paid" in response.data
+
+
+@pytest.mark.django_db
+def test_create_payment_negative_amount_paid_rejected(api_client, regular_user, get_auth_header, sample_payment_data):
+    """Verify payment creation rejects negative amount_paid (400 Bad Request)."""
+    headers = get_auth_header(regular_user)
+    payload = {**sample_payment_data, "amount_paid": -5000}
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "amount_paid" in response.data
+
+
+@pytest.mark.django_db
+def test_update_payment_amount_paid_mismatch_rejected(api_client, regular_user, get_auth_header, sample_payment):
+    """Verify updating payment with amount_paid mismatch is rejected (400 Bad Request)."""
+    headers = get_auth_header(regular_user)
+    payload = {"amount_paid": 200000}
+    response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "amount_paid" in response.data
 
 
 @pytest.mark.django_db
@@ -489,3 +674,251 @@ def test_delete_payment_non_owner_forbidden(api_client, another_regular_user, ge
     headers = get_auth_header(another_regular_user)
     response = api_client.delete(f"/api/payments/{sample_payment.id}/", **headers)
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("settled_status", ["Completed", "Refunded"])
+def test_delete_settled_payment_owner_returns_409_conflict(
+    api_client, regular_user, get_auth_header, sample_registration, sample_ticket, settled_status
+):
+    """Verify owner User attempting to DELETE a Completed or Refunded payment receives 409 Conflict."""
+    payment = Payment.objects.create(
+        registration=sample_registration,
+        payment_method="Credit Card",
+        payment_status=settled_status,
+        amount_paid=sample_ticket.price,
+    )
+    headers = get_auth_header(regular_user)
+    response = api_client.delete(f"/api/payments/{payment.id}/", **headers)
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.data == {"detail": "Completed or refunded payments cannot be deleted."}
+    assert Payment.objects.filter(id=payment.id).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("settled_status", ["Completed", "Refunded"])
+def test_delete_settled_payment_superuser_and_admin_returns_409_conflict(
+    api_client, superuser, admin_user, get_auth_header, sample_registration, sample_ticket, settled_status
+):
+    """Verify Superuser and Admin attempting to DELETE a Completed or Refunded payment also receive 409 Conflict."""
+    for actor in (superuser, admin_user):
+        payment = Payment.objects.create(
+            registration=sample_registration,
+            payment_method="Bank Transfer",
+            payment_status=settled_status,
+            amount_paid=sample_ticket.price,
+        )
+        headers = get_auth_header(actor)
+        response = api_client.delete(f"/api/payments/{payment.id}/", **headers)
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data == {"detail": "Completed or refunded payments cannot be deleted."}
+        assert Payment.objects.filter(id=payment.id).exists()
+
+
+@pytest.mark.django_db
+def test_delete_failed_payment_succeeds_with_204(
+    api_client, regular_user, get_auth_header, sample_registration, sample_ticket
+):
+    """Verify owner User can delete a payment in Failed status (204 No Content)."""
+    payment = Payment.objects.create(
+        registration=sample_registration,
+        payment_method="Bank Transfer",
+        payment_status="Failed",
+        amount_paid=sample_ticket.price,
+    )
+    headers = get_auth_header(regular_user)
+    response = api_client.delete(f"/api/payments/{payment.id}/", **headers)
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert not Payment.objects.filter(id=payment.id).exists()
+
+
+# ==========================================
+# 9. Duplicate Completed Settlement Prevention
+# ==========================================
+
+
+@pytest.mark.django_db
+def test_create_payment_duplicate_completed_rejected(
+    api_client, regular_user, get_auth_header, sample_registration, sample_ticket
+):
+    """Verify creating a second Completed payment for a Registration is rejected with 400 Bad Request."""
+    Payment.objects.create(
+        registration=sample_registration,
+        payment_method="Credit Card",
+        payment_status="Completed",
+        amount_paid=sample_ticket.price,
+    )
+
+    headers = get_auth_header(regular_user)
+    payload = {
+        "registration_id": str(sample_registration.id),
+        "payment_method": "GoPay",
+        "payment_status": "Completed",
+        "amount_paid": sample_ticket.price,
+    }
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "payment_status" in response.data
+    assert "This registration already has a completed payment." in str(response.data["payment_status"])
+
+
+@pytest.mark.django_db
+def test_update_payment_to_completed_when_already_completed_rejected(
+    api_client, regular_user, get_auth_header, sample_registration, sample_ticket
+):
+    """Verify updating a Pending/Failed payment to Completed when another Completed exists is rejected (400)."""
+    Payment.objects.create(
+        registration=sample_registration,
+        payment_method="Credit Card",
+        payment_status="Completed",
+        amount_paid=sample_ticket.price,
+    )
+    pending_payment = Payment.objects.create(
+        registration=sample_registration,
+        payment_method="Bank Transfer",
+        payment_status="Pending",
+        amount_paid=sample_ticket.price,
+    )
+
+    headers = get_auth_header(regular_user)
+    payload = {"payment_status": "Completed"}
+    response = api_client.put(f"/api/payments/{pending_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "payment_status" in response.data
+    assert "This registration already has a completed payment." in str(response.data["payment_status"])
+
+
+@pytest.mark.django_db
+def test_create_payment_failed_then_completed_succeeds(
+    api_client, regular_user, get_auth_header, sample_registration, sample_ticket
+):
+    """Verify creating a Failed payment and subsequently a Completed payment for same registration succeeds."""
+    Payment.objects.create(
+        registration=sample_registration,
+        payment_method="Credit Card",
+        payment_status="Failed",
+        amount_paid=sample_ticket.price,
+    )
+
+    headers = get_auth_header(regular_user)
+    payload = {
+        "registration_id": str(sample_registration.id),
+        "payment_method": "GoPay",
+        "payment_status": "Completed",
+        "amount_paid": sample_ticket.price,
+    }
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["payment_status"] == "Completed"
+
+
+@pytest.mark.django_db
+def test_update_existing_completed_payment_succeeds(
+    api_client, regular_user, get_auth_header, sample_registration, sample_ticket
+):
+    """Verify updating fields on an existing Completed payment does not trigger duplicate error."""
+    completed_payment = Payment.objects.create(
+        registration=sample_registration,
+        payment_method="Credit Card",
+        payment_status="Completed",
+        amount_paid=sample_ticket.price,
+    )
+
+    headers = get_auth_header(regular_user)
+    payload = {"payment_method": "Bank Transfer"}
+    response = api_client.put(f"/api/payments/{completed_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["payment_method"] == "Bank Transfer"
+    assert response.data["payment_status"] == "Completed"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("refunded_input", ["Refunded", "refunded", "REFUNDED"])
+def test_create_payment_refunded_status_regular_user_forbidden(
+    api_client, regular_user, get_auth_header, sample_payment_data, refunded_input
+):
+    """Verify regular User attempting to create Payment with Refunded status receives 403 Forbidden."""
+    headers = get_auth_header(regular_user)
+    payload = {**sample_payment_data, "payment_status": refunded_input}
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_create_payment_refunded_status_organizer_forbidden(api_client, organizer_user, get_auth_header, sample_ticket):
+    """Verify Organizer attempting to create Payment with Refunded status receives 403 Forbidden."""
+    org_reg = Registration.objects.create(ticket=sample_ticket, user=organizer_user)
+    headers = get_auth_header(organizer_user)
+    payload = {
+        "registration_id": str(org_reg.id),
+        "payment_method": "Credit Card",
+        "payment_status": "Refunded",
+        "amount_paid": 100000,
+    }
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_update_payment_refunded_status_regular_user_forbidden(
+    api_client, regular_user, get_auth_header, sample_payment
+):
+    """Verify regular User attempting to update Payment to Refunded status receives 403 Forbidden."""
+    headers = get_auth_header(regular_user)
+    payload = {"payment_status": "Refunded"}
+    response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_create_payment_refunded_status_admin_succeeds(api_client, admin_user, get_auth_header, sample_registration):
+    """Verify Admin can create Payment with Refunded status (201 Created)."""
+    headers = get_auth_header(admin_user)
+    payload = {
+        "registration_id": str(sample_registration.id),
+        "payment_method": "Bank Transfer",
+        "payment_status": "Refunded",
+        "amount_paid": 100000,
+    }
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["payment_status"] == "Refunded"
+
+
+@pytest.mark.django_db
+def test_create_payment_refunded_status_superuser_succeeds(api_client, superuser, get_auth_header, sample_registration):
+    """Verify Superuser can create Payment with Refunded status (201 Created)."""
+    headers = get_auth_header(superuser)
+    payload = {
+        "registration_id": str(sample_registration.id),
+        "payment_method": "Bank Transfer",
+        "payment_status": "refunded",
+        "amount_paid": 100000,
+    }
+    response = api_client.post("/api/payments/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["payment_status"] == "Refunded"
+
+
+@pytest.mark.django_db
+def test_update_payment_refunded_status_admin_succeeds(api_client, admin_user, get_auth_header, sample_payment):
+    """Verify Admin can update Payment to Refunded status (200 OK)."""
+    headers = get_auth_header(admin_user)
+    payload = {"payment_status": "Refunded"}
+    response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["payment_status"] == "Refunded"
+    sample_payment.refresh_from_db()
+    assert sample_payment.payment_status == "Refunded"
+
+
+@pytest.mark.django_db
+def test_update_payment_refunded_status_superuser_succeeds(api_client, superuser, get_auth_header, sample_payment):
+    """Verify Superuser can update Payment to Refunded status (200 OK)."""
+    headers = get_auth_header(superuser)
+    payload = {"payment_status": "refunded"}
+    response = api_client.put(f"/api/payments/{sample_payment.id}/", payload, format="json", **headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["payment_status"] == "Refunded"
+    sample_payment.refresh_from_db()
+    assert sample_payment.payment_status == "Refunded"

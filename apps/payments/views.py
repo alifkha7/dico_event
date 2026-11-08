@@ -117,6 +117,14 @@ class PaymentViewSet(PartialUpdateMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        if instance.payment_status in ("Completed", "Refunded"):
+            logger.warning(
+                f"Deletion rejected: Payment {instance.id} is in settled status '{instance.payment_status}'."
+            )
+            return Response(
+                {"detail": "Completed or refunded payments cannot be deleted."},
+                status=status.HTTP_409_CONFLICT,
+            )
         payment_id = str(instance.id)
         self.perform_destroy(instance)
         logger.info(f"Payment deleted successfully: (ID: {payment_id})")

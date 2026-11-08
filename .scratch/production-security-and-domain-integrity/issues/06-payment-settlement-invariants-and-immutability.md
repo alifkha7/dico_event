@@ -4,11 +4,11 @@
 
 **Blocked by:** 04: Relational Audit Protection (`PROTECT`) and `409 Conflict` Deletion Guards
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] Creating or updating a `Payment` requires `amount_paid` to equal the associated `Ticket.price` (including `amount_paid == 0` when `Ticket.price == 0`), rejecting any mismatch with `400 Bad Request`.
-- [ ] `payment_status` is validated and normalized case-insensitively against `Pending`, `Completed`, `Failed`, and `Refunded`, rejecting unknown status strings with `400 Bad Request`.
-- [ ] Non-admin actors (`User` or `Organizer`) attempting to create or update a `Payment` with `payment_status` set to `Refunded` are rejected with `403 Forbidden`, while `Admin` and `Superuser` actors succeed.
-- [ ] Creating or updating a `Payment` to `Completed` locks the parent `Registration` inside an atomic transaction and rejects the request with `400 Bad Request` if that `Registration` already has a `Completed` payment.
-- [ ] Attempting to `DELETE` a `Payment` whose status is `Completed` or `Refunded` is rejected with `409 Conflict`, whereas deleting a `Payment` in `Pending` or `Failed` status succeeds with `204 No Content`.
-- [ ] Automated HTTP API tests verify exact price matching (paid and free tickets), canonical status validation, admin-only `Refunded` transitions, duplicate `Completed` settlement prevention, and `409 Conflict` deletion immutability on settled payments.
+- [x] Creating or updating a `Payment` requires `amount_paid` to equal the associated `Ticket.price` (including `amount_paid == 0` when `Ticket.price == 0`), rejecting any mismatch with `400 Bad Request`.
+- [x] `payment_status` is validated and normalized case-insensitively against `Pending`, `Completed`, `Failed`, and `Refunded`, rejecting unknown status strings with `400 Bad Request`.
+- [x] Non-admin actors (`User` or `Organizer`) attempting to create or update a `Payment` with `payment_status` set to `Refunded` are rejected with `403 Forbidden`, while `Admin` and `Superuser` actors succeed.
+- [x] Creating or updating a `Payment` to `Completed` locks the parent `Registration` inside an atomic transaction and rejects the request with `400 Bad Request` if that `Registration` already has a `Completed` payment.
+- [x] Attempting to `DELETE` a `Payment` whose status is `Completed` or `Refunded` is rejected with `409 Conflict`, whereas deleting a `Payment` in `Pending` or `Failed` status succeeds with `204 No Content`.
+- [x] Automated HTTP API tests verify exact price matching (paid and free tickets), canonical status validation, admin-only `Refunded` transitions, duplicate `Completed` settlement prevention, and `409 Conflict` deletion immutability on settled payments.
